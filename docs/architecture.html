@@ -1,0 +1,1078 @@
+<title>LogLens 아키텍처</title>
+<style>
+/* ───────────────────────────────────────────────────────────
+   LogLens 아키텍처 — 스펙시트 조판
+   정체성: 이 문서의 주제가 "한 줄의 형식"이므로 모노스페이스가 목소리다.
+   ─────────────────────────────────────────────────────────── */
+
+:root{
+  /* 라이트 = 완전한 팔레트. 중성색은 액센트 쪽으로 살짝 보라 기운. */
+  --paper:      #F4F5F8;
+  --surface:    #FFFFFF;
+  --surface-2:  #EDEEF3;
+  --ink:        #15171F;
+  --ink-2:      #3C4250;
+  --muted:      #626A7A;
+  --faint:      #8C93A1;
+  --rule:       #DBDDE5;
+  --rule-2:     #C7CAD5;
+  --accent:     #5546B8;
+  --accent-ink: #FFFFFF;
+  --accent-wash:#EBE8F9;
+
+  --lv-v: #737C8C;
+  --lv-d: #2A6FBE;
+  --lv-i: #1E8A50;
+  --lv-w: #9A6503;
+  --lv-e: #C13F3A;
+
+  --key:   #2A6FBE;
+  --mask:  #9A6503;
+  --shadow: 0 1px 2px rgba(20,23,32,.05), 0 8px 24px -12px rgba(20,23,32,.16);
+
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", "Roboto Mono", monospace;
+  --sans: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+          "Segoe UI", "Noto Sans KR", system-ui, sans-serif;
+
+  --col: 68ch;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:      #101219;
+    --surface:    #171A22;
+    --surface-2:  #1E212B;
+    --ink:        #E3E6EE;
+    --ink-2:      #BFC5D2;
+    --muted:      #8E96A6;
+    --faint:      #6B7383;
+    --rule:       #262A35;
+    --rule-2:     #333846;
+    --accent:     #A294F5;
+    --accent-ink: #14121F;
+    --accent-wash:#221F35;
+
+    --lv-v: #7E869A;
+    --lv-d: #63A8E8;
+    --lv-i: #56C98A;
+    --lv-w: #E0A93C;
+    --lv-e: #EE7C76;
+
+    --key:  #7FB6EC;
+    --mask: #E0A93C;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+  }
+}
+
+:root[data-theme="dark"]{
+  --paper:      #101219;
+  --surface:    #171A22;
+  --surface-2:  #1E212B;
+  --ink:        #E3E6EE;
+  --ink-2:      #BFC5D2;
+  --muted:      #8E96A6;
+  --faint:      #6B7383;
+  --rule:       #262A35;
+  --rule-2:     #333846;
+  --accent:     #A294F5;
+  --accent-ink: #14121F;
+  --accent-wash:#221F35;
+
+  --lv-v: #7E869A;
+  --lv-d: #63A8E8;
+  --lv-i: #56C98A;
+  --lv-w: #E0A93C;
+  --lv-e: #EE7C76;
+
+  --key:  #7FB6EC;
+  --mask: #E0A93C;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+}
+
+*{ box-sizing: border-box; }
+
+body{
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── 페이지 골격 ─────────────────────────────────────────── */
+.page{
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 28px 120px;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 0 56px;
+  align-items: start;
+}
+@media (max-width: 940px){
+  .page{ grid-template-columns: minmax(0,1fr); gap: 0; padding: 0 20px 80px; }
+}
+
+/* ── 머리말 ──────────────────────────────────────────────── */
+.masthead{
+  grid-column: 1 / -1;
+  border-bottom: 2px solid var(--ink);
+  padding: 64px 0 26px;
+  margin-bottom: 44px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 20px 40px;
+}
+.masthead h1{
+  margin: 0;
+  font-size: clamp(34px, 5.4vw, 56px);
+  line-height: 1.02;
+  letter-spacing: -.035em;
+  font-weight: 800;
+  text-wrap: balance;
+}
+.masthead h1 .lens{ color: var(--accent); }
+.masthead .sub{
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 16.5px;
+  max-width: 46ch;
+}
+.masthead .meta{
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.9;
+  color: var(--faint);
+  text-align: right;
+  letter-spacing: .01em;
+}
+.masthead .meta b{ color: var(--ink-2); font-weight: 500; }
+@media (max-width: 940px){
+  .masthead{ padding-top: 40px; }
+  .masthead .meta{ margin-left: 0; text-align: left; }
+}
+
+/* ── 좌측 목차 ───────────────────────────────────────────── */
+.rail{
+  position: sticky;
+  top: 28px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.rail .rail-label{
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: .13em;
+  font-size: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 12px;
+}
+.rail ol{ list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+.rail a{
+  color: var(--muted);
+  text-decoration: none;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 4px;
+}
+.rail a:hover{ color: var(--accent); }
+.rail a:focus-visible{ outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+.rail a .n{ color: var(--faint); font-variant-numeric: tabular-nums; }
+@media (max-width: 940px){ .rail{ display: none; } }
+
+/* ── 본문 ────────────────────────────────────────────────── */
+main{ min-width: 0; display: grid; gap: 0; }
+section{ padding-bottom: 12px; scroll-margin-top: 24px; }
+
+h2{
+  font-size: 25px;
+  line-height: 1.24;
+  letter-spacing: -.022em;
+  font-weight: 750;
+  margin: 60px 0 6px;
+  padding-top: 22px;
+  border-top: 1px solid var(--rule);
+  text-wrap: balance;
+}
+h2 .n{
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  display: block;
+  letter-spacing: .1em;
+  margin-bottom: 8px;
+}
+h3{
+  font-size: 16.5px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  margin: 34px 0 4px;
+}
+p{ margin: 12px 0; max-width: var(--col); color: var(--ink-2); }
+p.lead{ font-size: 17.5px; color: var(--ink); max-width: 60ch; }
+strong{ color: var(--ink); font-weight: 650; }
+a{ color: var(--accent); }
+
+ul{ margin: 12px 0; padding-left: 18px; max-width: var(--col); color: var(--ink-2); }
+li{ margin: 7px 0; }
+li::marker{ color: var(--faint); }
+
+code{
+  font-family: var(--mono);
+  font-size: .875em;
+  background: var(--surface-2);
+  border-radius: 3px;
+  padding: .1em .34em;
+  color: var(--ink);
+}
+
+/* ── 로그 줄 / 코드 블록 ─────────────────────────────────── */
+.log{
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.85;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 14px 16px;
+  margin: 18px 0;
+  overflow-x: auto;
+  white-space: pre;
+  box-shadow: var(--shadow);
+  color: var(--ink-2);
+}
+.log .ts{ color: var(--faint); }
+.log .lv-I{ color: var(--lv-i); font-weight: 600; }
+.log .lv-W{ color: var(--lv-w); font-weight: 600; }
+.log .lv-E{ color: var(--lv-e); font-weight: 600; }
+.log .lv-D{ color: var(--lv-d); font-weight: 600; }
+.log .tag{ color: var(--accent); }
+.log .evt{ color: var(--ink); font-weight: 650; }
+.log .k{ color: var(--key); }
+.log .mask{ color: var(--mask); font-weight: 600; }
+.log .msg{ color: var(--muted); }
+.log .cmt{ color: var(--faint); font-style: normal; }
+
+pre.code{
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 14px 16px;
+  margin: 18px 0;
+  overflow-x: auto;
+  color: var(--ink-2);
+}
+pre.code .cmt{ color: var(--faint); }
+pre.code .kw{ color: var(--accent); }
+
+/* ── 그림 ────────────────────────────────────────────────── */
+figure{
+  margin: 30px 0 26px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--surface);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+figure .frame{ padding: 22px 20px 6px; overflow-x: auto; }
+figure svg{ display: block; max-width: 100%; height: auto; margin: 0 auto; color: var(--ink-2); }
+figcaption{
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--muted);
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--rule);
+  background: var(--surface-2);
+}
+figcaption b{ color: var(--ink-2); font-weight: 600; }
+
+/* SVG 내부 공통 */
+.d-box{ fill: var(--surface-2); stroke: var(--rule-2); stroke-width: 1; }
+.d-box-a{ fill: var(--accent-wash); stroke: var(--accent); stroke-width: 1.4; }
+.d-t{ font-family: var(--mono); font-size: 12px; fill: var(--ink); }
+.d-t-s{ font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+.d-t-a{ font-family: var(--mono); font-size: 11px; fill: var(--accent); font-weight: 600; }
+.d-ln{ stroke: var(--ink-2); stroke-width: 1.3; fill: none; }
+.d-ln-a{ stroke: var(--accent); stroke-width: 1.6; fill: none; }
+.d-ln-x{ stroke: var(--lv-e); stroke-width: 1.5; fill: none; }
+.d-dash{ stroke: var(--rule-2); stroke-width: 1.2; stroke-dasharray: 4 4; fill: none; }
+
+/* ── 표 ──────────────────────────────────────────────────── */
+.tw{ overflow-x: auto; margin: 20px 0; border: 1px solid var(--rule); border-radius: 5px; background: var(--surface); }
+table{ border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td{ text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+thead th{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--faint);
+  font-weight: 500;
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+tbody tr:last-child td{ border-bottom: none; }
+td code{ background: none; padding: 0; color: var(--accent); }
+td.num{ font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+td.mono{ font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+
+/* ── 강조 블록 ───────────────────────────────────────────── */
+.note{
+  margin: 22px 0;
+  padding: 14px 18px;
+  background: var(--accent-wash);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  max-width: var(--col);
+}
+.note p{ margin: 0; color: var(--ink-2); }
+.note p + p{ margin-top: 8px; }
+.note .tagline{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.bug{
+  margin: 22px 0;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--lv-e);
+  border-radius: 0 4px 4px 0;
+  max-width: var(--col);
+}
+.bug p{ margin: 0; }
+.bug p + p{ margin-top: 8px; }
+.bug .tagline{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--lv-e);
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+/* ── 단계 목록 ───────────────────────────────────────────── */
+.steps{ list-style: none; padding: 0; margin: 22px 0; display: grid; gap: 2px; max-width: var(--col); }
+.steps li{
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 12px;
+  margin: 0;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.steps li:last-child{ border-bottom: none; }
+.steps .s-n{
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  padding-top: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.steps .s-b b{ display: block; font-weight: 650; color: var(--ink); }
+.steps .s-b span{ color: var(--muted); font-size: 14.5px; }
+
+/* ── 상태 칩 ─────────────────────────────────────────────── */
+.chip{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.chip.ok{ background: color-mix(in srgb, var(--lv-i) 15%, transparent); color: var(--lv-i); }
+.chip.no{ background: color-mix(in srgb, var(--lv-w) 16%, transparent); color: var(--lv-w); }
+
+footer{
+  grid-column: 1 / -1;
+  margin-top: 66px;
+  padding-top: 22px;
+  border-top: 2px solid var(--ink);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--faint);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div>
+      <h1>Log<span class="lens">Lens</span> 아키텍처</h1>
+      <p class="sub">도메인 기반 구조화 로깅 표준과 그 전용 뷰어가
+      실제로 어떻게 도는가 — call site 에서 브라우저 픽셀까지.</p>
+    </div>
+    <div class="meta">
+      emitter <b>순수 자바</b> · 무의존<br>
+      viewer <b>Python 3.8+</b> · 표준 라이브러리만<br>
+      계약 <b>한 줄 텍스트</b> · 코드 의존 없음<br>
+      검증 <b>67 + 242 + 26</b>
+    </div>
+  </header>
+
+  <nav class="rail" aria-label="목차">
+    <div class="rail-label">Contents</div>
+    <ol>
+      <li><a href="#s0"><span class="n">00</span><span>전제</span></a></li>
+      <li><a href="#s1"><span class="n">01</span><span>계약 = 한 줄</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span>전체 흐름</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span>emitter</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span>기기에 붙는 법</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span>뷰어 내부</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span>강등 사다리</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span>기술 스택</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span>검증 구조</span></a></li>
+      <li><a href="#s9"><span class="n">09</span><span>한계</span></a></li>
+      <li><a href="#s10"><span class="n">10</span><span>0 → 1</span></a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <!-- ══════════════════════════════════════════ 00 -->
+  <section id="s0">
+    <p class="lead">뷰어와 분석은 찍힌 로그만큼만 좋아진다. 아무리 좋은 뷰어도
+    잡다한 로그 위에선 잡다하게 보인다. 그래서 진짜 레버리지는 뷰어가 아니라
+    <strong>로그를 규격대로 찍게 만드는 쪽</strong>에 있고, 뷰어는 그 규격을
+    착취하는 소비 도구다.</p>
+
+    <p>이 판단이 구조를 결정했다. 컴포넌트는 둘인데, 둘 사이에
+    <strong>코드 의존이 없다</strong>. 공유하는 건 가운데의 한 줄 텍스트 규격뿐이다.
+    라이브러리를 코틀린으로 다시 쓰든 뷰어를 Go 로 옮기든 반대쪽은 알 필요가 없다.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════ 01 -->
+  <section id="s1">
+    <h2><span class="n">01</span>계약 — 한 줄이 전부다</h2>
+
+    <p>emitter 와 뷰어가 공유하는 유일한 것. 이 줄의 어느 부분이 계약이고 어느
+    부분이 아닌지를 구분하는 게 설계의 첫 단추였다.</p>
+
+    <figure>
+      <div class="frame">
+        <svg viewBox="0 0 700 196" role="img"
+             aria-label="로그 한 줄의 해부도. 타임스탬프·pid·tid·레벨로 이루어진 접두사는 소스마다 다르고, 태그는 도메인이며, evt와 키-값과 자유 메시지로 이루어진 본문만이 계약이다.">
+          <!-- 로그 줄 -->
+          <text class="d-t" x="16"  y="34" style="fill:var(--faint)">08-12 11:23:45.678</text>
+          <text class="d-t" x="166" y="34" style="fill:var(--faint)">4321  4390</text>
+          <text class="d-t" x="254" y="34" style="fill:var(--lv-i)" font-weight="700">I</text>
+          <text class="d-t" x="272" y="34" style="fill:var(--accent)">APP_AUTH:</text>
+          <text class="d-t" x="354" y="34" font-weight="700">evt=LOGIN_OK</text>
+          <text class="d-t" x="456" y="34" style="fill:var(--key)">uid=668</text>
+          <text class="d-t" x="519" y="34" style="fill:var(--muted)">| 로그인 성공</text>
+
+          <!-- 브래킷: 접두사 -->
+          <path class="d-dash" d="M16 48 V58 H262 V48" />
+          <text class="d-t-s" x="139" y="76" text-anchor="middle">접두사</text>
+          <text class="d-t-s" x="139" y="92" text-anchor="middle">계약 아님</text>
+
+          <!-- 브래킷: 태그 -->
+          <path class="d-ln-a" d="M272 48 V58 H342 V48" />
+          <text class="d-t-a" x="307" y="76" text-anchor="middle">태그</text>
+          <text class="d-t-s" x="307" y="92" text-anchor="middle">= 도메인</text>
+
+          <!-- 브래킷: 본문 -->
+          <path class="d-ln-a" d="M354 48 V58 H613 V48" />
+          <text class="d-t-a" x="483" y="76" text-anchor="middle">본문 — 이것이 계약</text>
+
+          <!-- 하단 설명 -->
+          <line class="d-dash" x1="16" y1="112" x2="684" y2="112" />
+
+          <text class="d-t-s" x="16" y="134">소스마다 다르다:</text>
+          <text class="d-t-s" x="128" y="134" style="fill:var(--ink-2)">threadtime · brief · 파일 싱크</text>
+          <text class="d-t-s" x="16" y="152">→ 얇은 접두사 파서 3종이 각각 처리하고, 본문은 하나의 파서가 본다.</text>
+
+          <text class="d-t-s" x="16" y="178" style="fill:var(--accent)">태그가 곧 도메인이라</text>
+          <text class="d-t-s" x="152" y="178">adb logcat -s APP_AUTH:*  가 우리 도구 없이도 도메인 필터가 된다.</text>
+        </svg>
+      </div>
+      <figcaption><b>계약은 본문뿐이다.</b> 접두사를 계약에 넣으려던 초안의 단일
+      정규식은 틀렸다 — <code>adb logcat</code> 의 표준 포맷들은 연도를 찍지 않는데
+      초안은 <code>\d{4}-\d\d-\d\d</code> 를 요구했다.</figcaption>
+    </figure>
+
+    <h3>불변식 넷</h3>
+    <ul>
+      <li><strong>태그 = <code>&lt;PREFIX&gt;_&lt;DOMAIN&gt;</code></strong> — 도메인을 본문에
+      넣는 흔한 래퍼(<code>Log.d("APP", "[AUTH] …")</code>)는 그 순간 logcat 태그 필터를
+      무력화한다. 태그 자리에 두면 도메인 필터가 공짜다.</li>
+      <li><strong>한 줄 = 한 레코드.</strong> 여러 줄로 쪼개면 멀티스레드 환경에서
+      다른 스레드 로그가 사이에 끼어 복구가 불가능해진다.</li>
+      <li><strong>값에 공백·<code>|</code>·개행 없음.</strong> 개행이 진짜 파서 킬러다.</li>
+      <li><strong>파서는 예외를 던지지 않는다.</strong> 규격 위반은 실패가 아니라 강등이다.</li>
+    </ul>
+
+    <div class="log"><span class="ts">2026-08-12 11:41:24.930</span> <span class="lv-I">I</span>/<span class="tag">APP_AUTH</span>: <span class="evt">evt=TOKEN_ISSUE</span> <span class="k">flowId</span>=f9254 <span class="k">token</span>=<span class="mask">***</span> <span class="k">expiresIn</span>=3600 <span class="k">authType</span>=oauth2
+<span class="cmt">                                                        ↑ 가려짐                        ↑ 안 가려짐</span></div>
+
+    <p><code>token</code> 은 가려졌고 <code>authType</code> 은 안 가려졌다. 마스킹이
+    <strong>정확 키 매칭</strong>이어야 하는 이유다 — 부분 일치로 가리면 <code>auth</code> 가
+    <code>authType</code> 까지 먹어치우고, 그러면 개발자가 마스킹을 우회하기 시작한다.
+    그게 진짜 사고로 이어진다.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════ 02 -->
+  <section id="s2">
+    <h2><span class="n">02</span>전체 흐름과 세 개의 경계</h2>
+
+    <figure>
+      <div class="frame">
+        <svg viewBox="0 0 900 260" role="img"
+             aria-label="앱 코드에서 브라우저까지의 전체 데이터 흐름. 기기 경계는 adb가, 프로세스 경계는 SSE가 넘는다.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" fill="currentColor" />
+            </marker>
+            <marker id="ah-a" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" style="fill:var(--accent)" />
+            </marker>
+          </defs>
+
+          <!-- 영역 라벨 -->
+          <text class="d-t-s" x="16"  y="18" style="fill:var(--faint)">안드로이드 기기</text>
+          <text class="d-t-s" x="404" y="18" style="fill:var(--faint)">개발 PC — 로컬 파이썬 프로세스</text>
+          <text class="d-t-s" x="790" y="18" style="fill:var(--faint)">브라우저</text>
+
+          <!-- 경계선 -->
+          <line class="d-dash" x1="382" y1="26" x2="382" y2="228" />
+          <line class="d-dash" x1="762" y1="26" x2="762" y2="228" />
+          <text class="d-t-a" x="382" y="246" text-anchor="middle">기기 경계 · adb</text>
+          <text class="d-t-a" x="762" y="246" text-anchor="middle">프로세스 경계 · SSE</text>
+
+          <!-- 기기 쪽 -->
+          <rect class="d-box" x="16"  y="40" width="120" height="46" rx="3" />
+          <text class="d-t" x="76" y="62" text-anchor="middle">앱 코드</text>
+          <text class="d-t-s" x="76" y="77" text-anchor="middle">call site</text>
+
+          <rect class="d-box-a" x="16" y="112" width="120" height="62" rx="3" />
+          <text class="d-t-a" x="76" y="132" text-anchor="middle">라이브러리</text>
+          <text class="d-t-s" x="76" y="147" text-anchor="middle">정화·마스킹</text>
+          <text class="d-t-s" x="76" y="161" text-anchor="middle">·절단</text>
+
+          <rect class="d-box" x="196" y="112" width="130" height="62" rx="3" />
+          <text class="d-t" x="261" y="138" text-anchor="middle">logcat</text>
+          <text class="d-t-s" x="261" y="154" text-anchor="middle">링버퍼</text>
+
+          <path class="d-ln" d="M76 88 V108" marker-end="url(#ah)" />
+          <path class="d-ln" d="M140 143 H192" marker-end="url(#ah)" />
+          <text class="d-t-s" x="166" y="136" text-anchor="middle">한 줄</text>
+
+          <!-- PC 쪽 -->
+          <rect class="d-box" x="404" y="112" width="96" height="62" rx="3" />
+          <text class="d-t" x="452" y="138" text-anchor="middle">Source</text>
+          <text class="d-t-s" x="452" y="154" text-anchor="middle">재연결</text>
+
+          <rect class="d-box" x="524" y="112" width="96" height="62" rx="3" />
+          <text class="d-t" x="572" y="138" text-anchor="middle">Parser</text>
+          <text class="d-t-s" x="572" y="154" text-anchor="middle">접두사→본문</text>
+
+          <rect class="d-box-a" x="644" y="112" width="96" height="62" rx="3" />
+          <text class="d-t-a" x="692" y="132" text-anchor="middle">Hub</text>
+          <text class="d-t-s" x="692" y="147" text-anchor="middle">링버퍼</text>
+          <text class="d-t-s" x="692" y="161" text-anchor="middle">+ 이슈트레이</text>
+
+          <path class="d-ln-a" d="M330 143 H400" marker-end="url(#ah-a)" />
+          <path class="d-ln" d="M504 143 H520" marker-end="url(#ah)" />
+          <path class="d-ln" d="M624 143 H640" marker-end="url(#ah)" />
+
+          <!-- 브라우저 -->
+          <rect class="d-box" x="790" y="112" width="94" height="62" rx="3" />
+          <text class="d-t" x="837" y="132" text-anchor="middle">GUI</text>
+          <text class="d-t-s" x="837" y="147" text-anchor="middle">탭·이슈</text>
+          <text class="d-t-s" x="837" y="161" text-anchor="middle">·대시보드</text>
+          <path class="d-ln-a" d="M744 143 H786" marker-end="url(#ah-a)" />
+
+          <!-- 파일 싱크 -->
+          <rect class="d-box" x="196" y="40" width="130" height="46" rx="3" />
+          <text class="d-t" x="261" y="62" text-anchor="middle">파일 싱크</text>
+          <text class="d-t-s" x="261" y="77" text-anchor="middle">날짜별</text>
+          <path class="d-ln" d="M140 128 H168 V63 H192" marker-end="url(#ah)" />
+          <path class="d-dash" d="M330 63 H452 V108" marker-end="url(#ah)" />
+          <text class="d-t-s" x="392" y="56" text-anchor="middle">--source file 로 재생</text>
+        </svg>
+      </div>
+      <figcaption><b>같은 한 줄 규격이 logcat 과 파일 양쪽에 쓰인다.</b> 그래서 파서
+      하나가 실시간 스트림과 저장된 덤프를 모두 읽는다.</figcaption>
+    </figure>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>경계</th><th>넘어가는 것</th><th>보장</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">앱 → logcat</td><td>정화·마스킹·절단이 끝난 한 줄</td><td>개행 없음, 4KB 이내, PII 마스킹 완료</td></tr>
+          <tr><td class="mono">기기 → PC</td><td><code>adb logcat -v threadtime</code> 텍스트</td><td>포맷 고정, 끊기면 자동 재연결</td></tr>
+          <tr><td class="mono">서버 → 브라우저</td><td>파싱된 레코드의 JSON 배치</td><td>100ms 배치, 느린 구독자는 드롭</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════ 03 -->
+  <section id="s3">
+    <h2><span class="n">03</span>emitter — 단계 순서에 이유가 있다</h2>
+
+    <div class="log"><span class="cmt">// call site 가 보는 전부</span>
+LogLens.i(AppDomain.AUTH, <span class="evt">"LOGIN_OK"</span>, <span class="k">"uid"</span>, uid, <span class="k">"msg"</span>, <span class="msg">"로그인 성공"</span>);
+LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class="k">"host"</span>, host);</div>
+
+    <ol class="steps">
+      <li><span class="s-n">01</span><span class="s-b"><b>레벨 게이팅</b>
+        <span>맨 앞이어야 한다. 릴리스에서 <code>d()</code> 는 varargs 배열 하나만 만들고 즉시 반환한다 —
+        문자열 연결도, 정화도, 마스킹도 없다. 로깅 표준이 성능 때문에 거부당하는 걸 막는 가장 값싼 방법.</span></span></li>
+      <li><span class="s-n">02</span><span class="s-b"><b>포맷 · 정화</b>
+        <span>키 검증, 값에서 공백→<code>_</code>, <code>|</code>→<code>/</code>, 개행→리터럴 이스케이프.
+        빈 값은 센티널 <code>-</code> — <code>k=</code> 는 문법 위반이라 레코드 전체를 강등시킨다.</span></span></li>
+      <li><span class="s-n">03</span><span class="s-b"><b>마스킹</b>
+        <span>정화 뒤에 오는 이유: 마스킹 결과(<code>***</code>)도 공백 없는 토큰이어야 계약이 유지된다.
+        순서가 반대면 마스킹 산출물을 다시 검사해야 한다.</span></span></li>
+      <li><span class="s-n">04</span><span class="s-b"><b>절단</b>
+        <span>맨 마지막. 필드를 다 붙인 뒤의 최종 길이라야 의미가 있다.
+        <strong>바이트로 세고 코드포인트로 자른다</strong> — 한글 3바이트, 이모지 4바이트라
+        순진하게 바이트로 자르면 문자가 반으로 갈린다.</span></span></li>
+      <li><span class="s-n">05</span><span class="s-b"><b>싱크 팬아웃</b>
+        <span>logcat · 파일 · (향후) 크래시 리포터. 싱크가 던진 예외는 삼킨다 —
+        로깅이 앱을 죽이면 안 된다.</span></span></li>
+    </ol>
+
+    <h3>도메인은 앱이 공급한다</h3>
+    <p>이게 "어느 프로젝트에나 붙는다"의 전부다. 도메인 목록은 프로젝트의 정체성이라
+    라이브러리에 enum 으로 박는 순간 재사용이 끝난다.</p>
+
+    <pre class="code"><span class="cmt">// 라이브러리 — 도메인을 모른다</span>
+<span class="kw">public interface</span> LogDomain { String tag(); }
+
+<span class="cmt">// 앱 — 자기 도메인을 정의한다</span>
+<span class="kw">public enum</span> AppDomain <span class="kw">implements</span> LogDomain {
+    AUTH, CHAT, NET, FILE_XFER;
+    <span class="kw">public</span> String tag() { <span class="kw">return</span> <span class="evt">"APP_"</span> + name(); }
+}</pre>
+
+    <div class="note">
+      <span class="tagline">모듈 경계</span>
+      <p><code>lib/core</code> 는 <strong>안드로이드를 모른다.</strong> 순수 자바다.
+      덕분에 일반 JVM 에서 <code>javac</code> 만으로 테스트되고, 뷰어 파서와의
+      왕복 검증(§08)을 실제로 돌릴 수 있다. 이게 결정적이었다.</p>
+    </div>
+
+    <div class="bug">
+      <span class="tagline">함정 — 실제로 밟음</span>
+      <p>라이브러리 모듈의 <code>BuildConfig.DEBUG</code> 는 <strong>그 라이브러리의</strong>
+      빌드타입이라, 앱이 release 여도 true 일 수 있다. 릴리스 앱에서 V/D 로그가 통째로 샌다.</p>
+      <p>→ 앱이 <code>init(isDebug)</code> 로 주입하거나 <code>FLAG_DEBUGGABLE</code> 을 런타임에 읽는다.
+      초기화 전 기본값은 <strong>디버그 아님</strong> — 잊었을 때 새는 것보다 빠지는 게 안전하다.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════ 04 -->
+  <section id="s4">
+    <h2><span class="n">04</span>뷰어가 기기에 붙는 원리</h2>
+
+    <p>웹 GUI 를 원하는데 브라우저 샌드박스는 USB·adb 소켓·임의 프로세스 실행을 막는다.
+    WebUSB 로도 안 된다 — adb 서버가 이미 기기를 독점하고 있다.</p>
+
+    <figure>
+      <div class="frame">
+        <svg viewBox="0 0 760 232" role="img"
+             aria-label="브라우저가 USB에 직접 접근하는 경로는 샌드박스에 막히고, 로컬 파이썬 프로세스를 브리지로 두면 브라우저는 HTTP만 하고 로컬 프로세스가 adb를 문다.">
+          <defs>
+            <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" fill="currentColor" />
+            </marker>
+            <marker id="ah2-a" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" style="fill:var(--accent)" />
+            </marker>
+          </defs>
+
+          <!-- 위: 막힌 경로 -->
+          <text class="d-t-s" x="16" y="18" style="fill:var(--lv-e)">막힌다</text>
+          <rect class="d-box" x="16" y="30" width="120" height="44" rx="3" />
+          <text class="d-t" x="76" y="57" text-anchor="middle">브라우저</text>
+
+          <rect class="d-box" x="560" y="30" width="120" height="44" rx="3" />
+          <text class="d-t" x="620" y="57" text-anchor="middle">기기 / USB</text>
+
+          <path class="d-ln-x" stroke-dasharray="5 4" d="M140 52 H556" />
+          <line class="d-ln-x" x1="336" y1="40" x2="360" y2="64" />
+          <line class="d-ln-x" x1="360" y1="40" x2="336" y2="64" />
+          <text class="d-t-s" x="348" y="86" text-anchor="middle" style="fill:var(--lv-e)">샌드박스</text>
+
+          <!-- 구분 -->
+          <line class="d-dash" x1="16" y1="108" x2="744" y2="108" />
+
+          <!-- 아래: 브리지 -->
+          <text class="d-t-a" x="16" y="132">로컬 브리지</text>
+          <rect class="d-box" x="16" y="144" width="120" height="60" rx="3" />
+          <text class="d-t" x="76" y="170" text-anchor="middle">브라우저</text>
+          <text class="d-t-s" x="76" y="186" text-anchor="middle">HTTP 만</text>
+
+          <rect class="d-box-a" x="290" y="144" width="150" height="60" rx="3" />
+          <text class="d-t-a" x="365" y="168" text-anchor="middle">로컬 프로세스</text>
+          <text class="d-t-s" x="365" y="184" text-anchor="middle">파싱 · 링버퍼 · 서버</text>
+
+          <rect class="d-box" x="590" y="144" width="120" height="60" rx="3" />
+          <text class="d-t" x="650" y="170" text-anchor="middle">기기 / USB</text>
+          <text class="d-t-s" x="650" y="186" text-anchor="middle">logcat</text>
+
+          <path class="d-ln-a" d="M140 174 H286" marker-end="url(#ah2-a)" />
+          <text class="d-t-s" x="213" y="166" text-anchor="middle">GET /api/stream</text>
+          <text class="d-t-a" x="213" y="196" text-anchor="middle">SSE ←</text>
+
+          <path class="d-ln" d="M444 174 H586" marker-end="url(#ah2)" />
+          <text class="d-t-s" x="515" y="166" text-anchor="middle">adb logcat</text>
+          <text class="d-t-s" x="515" y="196" text-anchor="middle">subprocess</text>
+
+          <text class="d-t-s" x="16" y="226">Electron 도, 파일 주입도 필요 없다. 브라우저는 자기가 할 수 있는 일(HTTP)만 하고, USB 는 로컬 프로세스가 본다.</text>
+        </svg>
+      </div>
+      <figcaption><b>브라우저 제약을 우회하는 게 아니라, 할 수 있는 일만 시킨다.</b>
+      통역은 로컬 프로세스 몫이다.</figcaption>
+    </figure>
+
+    <h3>adb 서브프로세스에서 의도적으로 고정한 것 넷</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>고정값</th><th>안 하면</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">-v threadtime</td><td>adb 기본 포맷은 버전·환경마다 다르다. 어느 날 남의 PC 에서 파서가 조용히 깨진다.</td></tr>
+          <tr><td class="mono">errors="replace"</td><td>기기가 깨진 바이트를 뱉으면 스트림 전체가 죽는다. 한 줄 손상은 감수하고 파이프라인은 돌린다.</td></tr>
+          <tr><td class="mono">bufsize=1</td><td>4KB 블록이 찰 때까지 로그가 안 나온다. "버튼 누르면 바로 뜬다"가 이 도구의 존재 이유다.</td></tr>
+          <tr><td class="mono">pidof 재확인</td><td>앱이 재시작되면 pid 가 바뀐다. 연결할 때마다 다시 푼다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="tagline">pid 필터가 결정적이다</span>
+      <p>실제 사내 앱에 붙여보니, 대상 앱 pid 로 거르는 것만으로 시스템·타앱 태그
+      <strong>140여 종이 한 번에 사라지고</strong> 앱이 찍은 태그 여덟 개만 남았다.
+      이 신호 없이는 화면이 쓸모가 없다.</p>
+      <p>단, <strong>이슈를 클릭한 상태에서는 pid 필터를 양보한다.</strong> ANR 은 앱이 아니라
+      <code>ActivityManager</code>(system_server)가 찍기 때문에, pid 로 거르면 방금 클릭한
+      이슈가 화면에서 사라진다.</p>
+    </div>
+
+    <h3>재연결은 예외가 아니라 정상 동작</h3>
+    <p>기기 sleep, USB 재연결, 앱 재시작, <code>adb kill-server</code>. 스트림은 끊긴다.
+    이걸 상위 레이어가 알게 하면 <em>모든</em> 레이어가 재연결을 알아야 한다.</p>
+    <p>그래서 소스가 무한 제너레이터다. 소비자는 그냥 <code>for line in source.lines()</code>
+    이고 끊김을 모른다. 상태 변화는 <code>--------- loglens: …</code> 마커 줄로 흘려보낸다 —
+    파서가 RAW 로 처리하고 Hub 가 가로채 UI 상태줄로 올린다. <strong>별도 채널이 필요 없다.</strong></p>
+
+    <p>같은 인터페이스 뒤에 소스가 셋 있다. 이 이음매 덕분에 <strong>기기 없이 뷰어 전체를
+    개발·테스트·데모</strong>할 수 있고, 로드맵의 세션 저장/재생이 붙을 자리도 이미 있다.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>소스</th><th>쓰임</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">adb</td><td>실기기. 재연결·pid추적·포맷고정</td></tr>
+          <tr><td class="mono">file</td><td>저장된 로그 재생 / tail -f</td></tr>
+          <tr><td class="mono">synth</td><td>합성 생성기 — 기기 없이 데모, CI 통합 테스트</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════ 05 -->
+  <section id="s5">
+    <h2><span class="n">05</span>뷰어 내부 — 스레드와 백프레셔</h2>
+
+    <pre class="code">파이썬 프로세스 (단일)
+│
+├── <span class="kw">Reader 스레드 (1개)</span>
+│     for line in source.lines():
+│         hub.ingest(parser.parse(line))
+│
+├── <span class="kw">Hub</span>  (공유 상태, threading.Lock)
+│     ├── deque(maxlen=20000)   링버퍼
+│     ├── IssueTray             규칙별·그룹키별 카운터
+│     └── [Queue, Queue, ...]   구독자별 큐 (브라우저 탭 하나당 하나)
+│
+└── <span class="kw">ThreadingHTTPServer</span>
+      ├── GET /api/stream  → 장수명. 큐를 빨아 SSE 로 밀어냄
+      └── 그 외            → 단명. JSON / 정적 파일</pre>
+
+    <p>파서가 <strong>단일 스레드</strong>인 게 중요하다. 로그는 초당 수천 줄이 올 수
+    있지만 정규식 매칭은 싸고, 순서 보존이 중요하다. 병렬화하면 순서가 깨지고 얻는 게 없다.</p>
+
+    <h3>백프레셔 정책: 느린 구독자를 굶긴다</h3>
+    <pre class="code"><span class="kw">for</span> q <span class="kw">in</span> subscribers:
+    <span class="kw">try</span>:    q.put_nowait(payload)
+    <span class="kw">except</span> Full:
+        q.get_nowait()      <span class="cmt"># ← 가장 오래된 걸 버리고 새 걸 넣는다</span>
+        q.put_nowait(payload)</pre>
+    <p>백그라운드 탭이나 멈춘 브라우저 때문에 전체 파이프라인이 막히면 안 된다.
+    로그 뷰어에서 오래된 줄을 잃는 건 감수할 만한 손실이고, 실시간성이 막히는 건 아니다.</p>
+
+    <h3>SSE</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>결정</th><th class="num">값</th><th>이유</th></tr></thead>
+        <tbody>
+          <tr><td>배치 주기</td><td class="num">100 ms</td><td>줄마다 이벤트를 보내면 초당 수천 DOM 이벤트로 브라우저가 죽는다. 사람 눈에 100ms 는 즉시다.</td></tr>
+          <tr><td>하트비트</td><td class="num">15 s</td><td><code>: ping</code> 주석 프레임. 유휴 연결을 프록시·브라우저가 끊는 걸 막는다.</td></tr>
+          <tr><td>구독자 큐</td><td class="num">2,000</td><td>넘치면 가장 오래된 것부터 드롭.</td></tr>
+          <tr><td>재연결</td><td class="num">브라우저</td><td><code>EventSource</code> 가 스스로 재접속한다. 서버는 상태 표시만 바꾼다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bug">
+      <span class="tagline">경합 — API 테스트를 쓰다가 발견</span>
+      <p>원래 순서는 <code>헤더 전송 → subscribe()</code> 였다. 그러면 클라이언트가 헤더를
+      받은 시점과 구독 성립 시점 사이의 레코드를 <strong>조용히 놓친다.</strong>
+      브라우저는 아무 에러도 못 보고 그냥 몇 줄이 빈다 — 사람 눈으로는 절대 안 잡힌다.</p>
+      <p>→ <code>subscribe()</code> 를 헤더보다 앞으로.</p>
+    </div>
+
+    <h3>집계 — 구조화 로그라서 가능한 것</h3>
+    <p>범용 logcat 뷰어가 원리상 못 하는 게 이거다. 문자열밖에 없으면 group-by 할 키가
+    없다. 우리는 emitter 단에서 이미 키-값으로 쪼개 놨으니 그냥 세면 된다.</p>
+    <ul>
+      <li><strong>성공률</strong> — 이벤트 접미사 <code>_OK</code> / <code>_FAIL</code> 로 판정</li>
+      <li><strong>실패 사유 분포</strong> — <code>reason</code>·<code>err</code>·<code>code</code> 필드에서 추출</li>
+      <li><strong>퍼널 이탈</strong> — <code>flowId</code> 로 흐름을 묶고, 없으면 카운트로 근사하되
+      <strong>어느 모드인지 UI 에 표시한다.</strong> 근사값을 정확한 값인 척하지 않는다</li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════════════════════════════ 06 -->
+  <section id="s6">
+    <h2><span class="n">06</span>강등 사다리 — 점진 도입의 기술적 기반</h2>
+
+    <figure>
+      <div class="frame">
+        <svg viewBox="0 0 720 284" role="img"
+             aria-label="파서의 세 갈래 강등. 접두사를 못 읽으면 RAW, 우리 태그가 아니거나 본문이 규격 위반이면 UNSTRUCTURED, 둘 다 통과하면 STRUCTURED. 어느 경우에도 줄을 버리지 않는다.">
+          <defs>
+            <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" fill="currentColor" />
+            </marker>
+          </defs>
+
+          <rect class="d-box" x="16" y="18" width="150" height="40" rx="3" />
+          <text class="d-t" x="91" y="43" text-anchor="middle">원문 한 줄</text>
+
+          <!-- 관문 1 -->
+          <path class="d-ln" d="M91 62 V86" marker-end="url(#ah3)" />
+          <rect class="d-box" x="16" y="90" width="150" height="40" rx="3" />
+          <text class="d-t-s" x="91" y="107" text-anchor="middle">접두사 매칭</text>
+          <text class="d-t-s" x="91" y="121" text-anchor="middle">3종 순차 시도</text>
+
+          <path class="d-ln" d="M170 110 H400" marker-end="url(#ah3)" />
+          <text class="d-t-s" x="285" y="102" text-anchor="middle" style="fill:var(--lv-v)">실패</text>
+          <rect class="d-box" x="404" y="90" width="130" height="40" rx="3" />
+          <text class="d-t" x="469" y="108" text-anchor="middle" style="fill:var(--lv-v)">RAW</text>
+          <text class="d-t-s" x="469" y="122" text-anchor="middle">원문 회색 표시</text>
+          <text class="d-t-s" x="548" y="114">구분선, 손상된 줄</text>
+
+          <!-- 관문 2 -->
+          <path class="d-ln" d="M91 134 V158" marker-end="url(#ah3)" />
+          <rect class="d-box" x="16" y="162" width="150" height="40" rx="3" />
+          <text class="d-t-s" x="91" y="179" text-anchor="middle">태그 + 본문 매칭</text>
+          <text class="d-t-s" x="91" y="193" text-anchor="middle">PREFIX_DOMAIN / evt=</text>
+
+          <path class="d-ln" d="M170 182 H400" marker-end="url(#ah3)" />
+          <text class="d-t-s" x="285" y="174" text-anchor="middle" style="fill:var(--lv-w)">실패</text>
+          <rect class="d-box" x="404" y="162" width="130" height="40" rx="3" />
+          <text class="d-t" x="469" y="180" text-anchor="middle" style="fill:var(--lv-w)">UNSTRUCTURED</text>
+          <text class="d-t-s" x="469" y="194" text-anchor="middle">태그 + 본문</text>
+          <text class="d-t-s" x="548" y="186">레거시 · 잘림</text>
+
+          <!-- 성공 -->
+          <path class="d-ln-a" d="M91 202 V230" marker-end="url(#ah3)" />
+          <text class="d-t-s" x="100" y="220" style="fill:var(--accent)">통과</text>
+          <rect class="d-box-a" x="16" y="234" width="150" height="38" rx="3" />
+          <text class="d-t-a" x="91" y="258" text-anchor="middle">STRUCTURED</text>
+          <text class="d-t-s" x="182" y="252">도메인 칩 · 이벤트 · 필드 칩</text>
+          <text class="d-t-s" x="182" y="266">· 이슈 트레이 · 집계에 편입</text>
+        </svg>
+      </div>
+      <figcaption><b>세 등급이 있고, 아무것도 버리지 않는다.</b> 라이브러리를 안 쓰는
+      앱에 붙여도 뷰어는 그냥 동작하고, call site 를 하나 옮길 때마다 그 줄만 리치해진다.</figcaption>
+    </figure>
+
+    <p><strong>"전부 이관해야 쓸 수 있다"는 요구가 없으니 채택 장벽이 사라진다.</strong>
+    탭은 <code>domains</code> 와 <code>legacyTagPattern</code> 을 둘 다 가질 수 있어서,
+    이관된 줄과 아직인 줄이 같은 탭에 나란히 보인다 — 이관 진행도가 눈에 보인다.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════ 07 -->
+  <section id="s7">
+    <h2><span class="n">07</span>기술 스택</h2>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>계층</th><th>선택</th><th>왜</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">lib/core</td><td class="mono">순수 자바 8</td><td>안드로이드·서드파티 무의존 → JVM 테스트, 왕복 검증, minSdk 21, 자바 앱 재사용</td></tr>
+          <tr><td class="mono">lib/android</td><td class="mono">android.util.Log</td><td>안드로이드에 닿는 유일한 모듈. 얇게 유지</td></tr>
+          <tr><td class="mono">lib 테스트</td><td class="mono">자체 하네스</td><td>"의존성 0" 을 테스트 코드에서도 지킨다. <code>javac</code> + <code>java</code> 만으로 242 단언</td></tr>
+          <tr><td class="mono">viewer</td><td class="mono">Python 표준 라이브러리</td><td><code>pip install</code> 없이 파일 복사로도 동작. 단일 바이너리 패키징 용이. 사내망 제약 환경에서도 붙음</td></tr>
+          <tr><td class="mono">서버</td><td class="mono">ThreadingHTTPServer</td><td>SSE 에 필요한 건 장수명 연결 + 스레드뿐</td></tr>
+          <tr><td class="mono">전송</td><td class="mono">SSE</td><td>단방향이면 충분. WebSocket 대비 단순하고 재연결이 브라우저에 내장</td></tr>
+          <tr><td class="mono">웹 UI</td><td class="mono">바닐라 JS + CSS</td><td>빌드 스텝 없음. 정적 파일 3개를 그대로 서빙</td></tr>
+          <tr><td class="mono">설정</td><td class="mono">JSON + Schema</td><td>에디터 자동완성이 되고, 잘못된 키를 로딩 시점에 잡는다</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>의도적으로 안 쓴 것</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>안 쓴 것</th><th>이유</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">Electron</td><td>웹 GUI 를 위해 200MB 런타임을 배포할 이유가 없다. 로컬 서버로 같은 걸 얻는다</td></tr>
+          <tr><td class="mono">WebSocket</td><td>양방향이 필요 없다. 브라우저→서버는 평범한 HTTP 로 충분</td></tr>
+          <tr><td class="mono">React / Vue</td><td>빌드 파이프라인이 배포 조건이 된다. 화면 하나짜리 도구엔 과하다</td></tr>
+          <tr><td class="mono">DB</td><td>개발단계 도구다. 세션이 끝나면 버려도 되는 데이터에 스키마 마이그레이션은 과하다</td></tr>
+          <tr><td class="mono">JUnit / pytest</td><td>각 런타임 기본 도구로 충분하고, 의존성 0 원칙과 충돌한다</td></tr>
+          <tr><td class="mono">ELK / 서버 수집</td><td>비목표. 온디바이스·개발단계 초점</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════ 08 -->
+  <section id="s8">
+    <h2><span class="n">08</span>검증 구조 — 왕복이 핵심이다</h2>
+
+    <p>손으로 쓴 픽스처는 <strong>양쪽에 같은 오해를 심을 수 있다.</strong> 내가 파서를
+    잘못 이해한 채로 픽스처를 쓰면 픽스처 테스트는 통과한다. 두 구현이 서로를 검사해야
+    그 오해가 드러난다.</p>
+
+    <div class="log"><span class="cmt">Java Formatter ──생성──▶ 한 줄 ──▶ Python Parser ──▶ 필드 대조
+   (emitter)                            (viewer)</span></div>
+
+    <p>기대값은 Formatter 의 출력을 되읽어 만들지 않는다 — 입력으로부터 독립적으로
+    조립한다. 그리고 이 검사가 실제로 파손을 잡는지 <strong>음성 대조</strong>로
+    확인했다: 구분자 파손 · 필드에 공백 주입 · 잘림 표식 제거 → 셋 다 검출됐다.</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>검사</th><th class="num">규모</th><th>범위</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">make test-viewer</td><td class="num">67 테스트</td><td>파서·집계·설정·서버 API·config 자동생성</td></tr>
+          <tr><td class="mono">make test-lib</td><td class="num">242 단언</td><td>정화·마스킹·절단·포맷·게이팅·싱크 (한글·이모지를 여러 절단 한도에서)</td></tr>
+          <tr><td class="mono">make roundtrip</td><td class="num">26 케이스</td><td><strong>계약 그 자체</strong></td></tr>
+          <tr><td class="mono">make demo</td><td class="num">end-to-end</td><td>진짜 emitter → 파일 → 뷰어</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bug">
+      <span class="tagline">테스트가 못 잡은 것</span>
+      <p><code>make demo</code> 가 깨져 있었다. <code>--out</code> 에 날짜 붙은 경로를 주면
+      파일 싱크가 날짜를 <strong>또</strong> 붙여서 뷰어는 없는 파일을 열고 조용히 아무것도
+      스트리밍하지 않았다. 335개 검사가 전부 초록인데도 못 잡았다 —
+      <strong>어떤 테스트도 make 타깃을 실행하지 않았기 때문이다.</strong></p>
+      <p>README 의 헤드라인 명령은 테스트 커버리지 밖에 있기 쉽다.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════ 09 -->
+  <section id="s9">
+    <h2><span class="n">09</span>한계 — 알고 감수한 것</h2>
+    <div class="tw">
+      <table>
+        <thead><tr><th>한계</th><th>대응 / 왜 감수하는가</th></tr></thead>
+        <tbody>
+          <tr><td>영속성 없음. 뷰어를 끄면 버퍼가 사라진다</td><td>장기 보관은 라이브러리의 파일 싱크 담당. 세션 저장은 로드맵</td></tr>
+          <tr><td>집계는 버퍼 범위(기본 2만 줄)</td><td>"어제 대비 성공률"은 못 한다. 서버 수집 파이프라인의 영역 — 명시적 비목표</td></tr>
+          <tr><td><code>flowId</code> 없으면 퍼널은 근사</td><td>상관 ID 는 처음부터 넣어야 한다. UI 가 근사 모드임을 표시</td></tr>
+          <tr><td>단일 기기</td><td>프로세스를 여러 개 띄워 푼다</td></tr>
+          <tr><td>난독화 스택 복원 없음</td><td>로드맵</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>현재 검증 상태</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>항목</th><th>상태</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">lib/core</td><td><span class="chip ok">검증</span> javac 21, 242 단언</td></tr>
+          <tr><td class="mono">viewer 전체</td><td><span class="chip ok">검증</span> 67 테스트 + 실제 HTTP 호출</td></tr>
+          <tr><td class="mono">계약 왕복</td><td><span class="chip ok">검증</span> 26 케이스 + 음성 대조</td></tr>
+          <tr><td class="mono">adb · pid · --init</td><td><span class="chip ok">검증</span> 실기기</td></tr>
+          <tr><td class="mono">lib/android · gradle</td><td><span class="chip no">소스만</span> Android SDK 부재로 미컴파일</td></tr>
+          <tr><td class="mono">브라우저 렌더</td><td><span class="chip no">부분</span> JS 문법·DOM 정합·API 모양만 테스트</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════ 10 -->
+  <section id="s10">
+    <h2><span class="n">10</span>0 → 1 — 이관 안 한 프로젝트에 붙이기</h2>
+
+    <ol class="steps">
+      <li><span class="s-n">01</span><span class="s-b"><b>지형부터 본다</b>
+        <span><code>loglens --source adb --package com.your.app --init your-app.json</code><br>
+        기기의 최근 logcat 을 표본으로 읽어 대상 앱 pid 가 찍은 태그만 골라 군집화하고
+        탭 초안을 만든다. 도메인이 뭔지 모르는 사람에게 도메인 탭을 적으라고 하면 아무도 안 쓴다.
+        <strong>태그 이름과 빈도만 읽는다</strong> — 메시지 본문은 산출물에 쓰지 않는다(테스트로 강제).</span></span></li>
+      <li><span class="s-n">02</span><span class="s-b"><b>붙여서 본다</b>
+        <span>아직 구조화 0%다. 지금은 "탭이 달린 logcat"이고, <strong>이게 정상이다.</strong>
+        뷰어의 가치는 emission 이 규격을 지킬 때 생긴다.</span></span></li>
+      <li><span class="s-n">03</span><span class="s-b"><b>call site #1 을 옮긴다</b>
+        <span>옮긴 그 줄부터 도메인 칩·필드 칩·이슈 트레이·성공률 집계에 들어간다.
+        <strong>옛 로그는 반드시 지운다</strong> — 추가만 하면 잡음과 구조가 공존해 오히려 두 배가 된다.</span></span></li>
+      <li><span class="s-n">04</span><span class="s-b"><b>탭의 domains 를 채운다</b>
+        <span><code>legacyTagPattern</code> 은 그대로 두고 새 도메인을 넣으면, 이관된 줄과
+        아직인 줄이 같은 탭에서 나란히 보인다. 진행도가 눈에 보인다.</span></span></li>
+      <li><span class="s-n">05</span><span class="s-b"><b>퍼널을 정의한다</b>
+        <span>규격이 자리 잡으면 <code>flowId</code> 를 심고 단계를 나열한다.
+        단계별 이탈률이 대시보드에 뜬다.</span></span></li>
+    </ol>
+
+    <div class="log"><span class="cmt">// before</span>
+Log.d(<span class="msg">"ChatListFragment"</span>, <span class="msg">"send fail, room=" + room + " " + e.getMessage()</span>);
+
+<span class="cmt">// after</span>
+LogLens.e(AppDomain.CHAT, <span class="evt">"SEND_FAIL"</span>, e, <span class="k">"room"</span>, room);</div>
+  </section>
+
+  </main>
+
+  <footer>
+    <span>LogLens · 구조화 로깅 표준 + 실시간 뷰어</span>
+    <span>emitter 무의존 · viewer 무의존 · 계약 한 줄</span>
+  </footer>
+
+</div>

@@ -13,7 +13,11 @@
 ```
 
 두 컴포넌트 사이에 **코드 의존이 없다.** 공유하는 건 한 줄짜리 레코드 규격뿐이다.
-→ [계약 전문](docs/RECORD_FORMAT.md)
+
+📄 **문서** — [동작 원리·아키텍처](docs/ARCHITECTURE.md) · [계약 전문](docs/RECORD_FORMAT.md) ·
+[구현 결정 기록](docs/DECISIONS.md) · [설계 초안(기획서)](기획서.md) · [문서 안내](docs/README.md)
+
+> 다이어그램까지 렌더한 HTML 판: `open docs/architecture.html`
 
 ---
 
