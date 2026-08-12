@@ -22,6 +22,8 @@ const state = {
   rx: false,
   rxCompiled: null,
   onlyStruct: false,
+  onlyPid: false,
+  pid: null,              // 대상 앱 pid (adb 소스가 패키지로부터 풀어준다)
   paused: false,
   autoscroll: true,
   issueFilter: null,      // {ruleId, key}
@@ -32,6 +34,7 @@ const state = {
 async function boot() {
   state.cfg = await (await fetch('/api/config')).json();
   $('src').textContent = describeSource(state.cfg.source);
+  applyPid(state.cfg.source);
   buildTabs();
   buildLevels();
   wire();
@@ -45,6 +48,20 @@ async function boot() {
   connect();
   setInterval(render, 100);
   setInterval(pollIssues, 1500);
+}
+
+/* 대상 앱 pid 필터. pid 를 아는 소스(adb + --package)에서만 노출한다. */
+function applyPid(src) {
+  state.pid = (src && src.pid) || null;
+  const wrap = $('pidWrap');
+  wrap.hidden = !state.pid;
+  if (state.pid) {
+    $('pidLabel').textContent = `${src.package || '이 앱'}만 (pid ${state.pid})`;
+  } else if (state.onlyPid) {
+    // 앱이 재시작돼 pid 를 잃으면 필터를 끈다. 안 그러면 화면이 통째로 빈다.
+    state.onlyPid = false;
+    $('onlyPid').checked = false;
+  }
 }
 
 function describeSource(s) {
@@ -124,6 +141,7 @@ function wire() {
   };
   $('rx').onchange = (e) => { state.rx = e.target.checked; compileQuery(); state.dirty = true; };
   $('onlyStruct').onchange = (e) => { state.onlyStruct = e.target.checked; state.dirty = true; };
+  $('onlyPid').onchange = (e) => { state.onlyPid = e.target.checked; state.dirty = true; };
   $('autoscroll').onchange = (e) => { state.autoscroll = e.target.checked; };
   $('btnPause').onclick = () => {
     state.paused = !state.paused;
@@ -190,6 +208,10 @@ function passes(r) {
   if (state.onlyStruct && r.kind !== 'structured') return false;
   if (!inTab(r, state.tab)) return false;
   if (state.issueFilter && !matchIssue(r)) return false;
+  // 이슈를 찍어서 들어온 상태에서는 pid 필터를 적용하지 않는다.
+  // ANR 은 system_server(ActivityManager) 가 찍으므로 앱 pid 로 거르면
+  // 방금 클릭한 이슈가 화면에서 사라진다.
+  if (!state.issueFilter && state.onlyPid && state.pid && r.pid !== state.pid) return false;
   if (state.q) {
     const hay = textOf(r);
     if (state.rxCompiled) { if (!state.rxCompiled.test(hay)) return false; }
@@ -264,12 +286,23 @@ function esc(s) {
 }
 
 /* ── 이슈 트레이 ───────────────────────────────────── */
+let pollTick = 0;
+
 async function pollIssues() {
   if (state.paused) return;
   try {
     const snap = await (await fetch('/api/snapshot?limit=1')).json();
     state.issues = snap.issues;
     renderTray();
+    // 앱이 재시작되면 pid 가 바뀐다. 소스가 다시 풀어준 값을 이따금 따라잡는다.
+    if (++pollTick % 4 === 0) {
+      const cfg = await (await fetch('/api/config')).json();
+      if ((cfg.source && cfg.source.pid) !== state.pid) {
+        $('src').textContent = describeSource(cfg.source);
+        applyPid(cfg.source);
+        state.dirty = true;
+      }
+    }
   } catch (_) {}
 }
 

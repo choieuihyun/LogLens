@@ -73,6 +73,23 @@ class TestApi(unittest.TestCase):
         self.assertEqual(d["tabs"][0]["id"], "auth")
         self.assertIn("kind", d["source"])
 
+    def test_source_describe_shape(self):
+        # UI 의 "이 앱만" 필터가 cfg.source.pid / .package 를 읽는다.
+        adb = build("adb", serial="ABC123", package="io.loglens.sample")
+        d = adb.describe()
+        for k in ("kind", "serial", "package", "pid", "format"):
+            self.assertIn(k, d)
+        self.assertEqual(d["format"], "threadtime",
+                         "파서가 아는 포맷과 adb 호출 포맷은 같아야 한다")
+        self.assertIsNone(d["pid"], "기기 없이는 pid 를 못 푼다 — None 이어야 한다")
+        self.assertIn("kind", build("synth").describe())
+        self.assertIn("path", build("file", path="x.log").describe())
+
+    def test_bad_limit_does_not_500(self):
+        code, d = self.get("/api/snapshot?limit=abc")
+        self.assertEqual(code, 200)
+        self.assertIn("records", d)
+
     def test_snapshot_shape(self):
         code, d = self.get("/api/snapshot?limit=100")
         self.assertEqual(code, 200)

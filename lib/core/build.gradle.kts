@@ -20,10 +20,19 @@ tasks.withType<JavaCompile>().configureEach {
 
 // 테스트는 JUnit 없이 도는 자체 하네스다 (CoreTests.main).
 // 의존성 0 을 지키기 위한 선택. `make test-lib` 와 같은 것을 실행한다.
+//
+// 주의: src/test/java 는 **소스** 디렉터리라 그대로 classpath 에 넣으면 안 된다.
+// 별도 SourceSet 으로 컴파일한 뒤 그 output 을 써야 한다. (gradle 미검증 구간)
+val harness by sourceSets.creating {
+    java.srcDir("src/test/java")
+    compileClasspath += sourceSets["main"].output
+    runtimeClasspath += sourceSets["main"].output
+}
+
 val coreTest by tasks.registering(JavaExec::class) {
     group = "verification"
     description = "core 단위 테스트 (JUnit 미사용)"
-    classpath = sourceSets["main"].runtimeClasspath + files("src/test/java")
+    classpath = harness.runtimeClasspath
     mainClass.set("io.loglens.core.CoreTests")
 }
 

@@ -175,7 +175,11 @@ def _handler_factory(hub: Hub, source: LogSource):
                 d["source"] = source.describe()
                 return self._json(d)
             if path == "/api/snapshot":
-                return self._json(hub.snapshot(int(q.get("limit", ["2000"])[0])))
+                try:
+                    limit = int(q.get("limit", ["2000"])[0])
+                except ValueError:
+                    limit = 2000          # 쿼리 오타로 요청이 500 나면 안 된다
+                return self._json(hub.snapshot(max(1, limit)))
             if path == "/api/stats":
                 return self._json(hub.stats())
             if path == "/api/stream":

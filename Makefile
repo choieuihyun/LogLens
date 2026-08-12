@@ -10,7 +10,10 @@ JAVAC   ?= javac
 JAVA    ?= java
 PYTHON  ?= python3
 CLASSES := build/classes
-DEMOLOG := build/demo/app-$(shell date +%Y-%m-%d).log
+# FileSink 가 날짜를 스스로 붙인다: --out 에는 접두사만 주고,
+# 뷰어에는 날짜가 붙은 실제 파일명을 준다. (이 둘을 같게 뒀다가 app-날짜-날짜.log 가 생겼다)
+DEMOSEED := build/demo/app.log
+DEMOLOG  := build/demo/app-$(shell date +%Y-%m-%d).log
 
 CORE_SRC := $(shell find lib/core/src -name '*.java' 2>/dev/null)
 DEMO_SRC := $(shell find lib/sample-domains/src sample-app/jvm/src tools/roundtrip/src -name '*.java' 2>/dev/null)
@@ -52,8 +55,9 @@ adb: ## 뷰어를 실제 기기에 붙인다  (make adb PKG=com.your.app)
 demo: build ## end-to-end: 진짜 emitter 가 파일에 쓰고 뷰어가 그걸 tail 한다
 	@mkdir -p build/demo
 	@echo "emitter → $(DEMOLOG)"
-	@$(JAVA) -cp $(CLASSES) io.loglens.demo.Demo --out $(DEMOLOG) --loops 200 --pause-ms 120 > /dev/null &
+	@$(JAVA) -cp $(CLASSES) io.loglens.demo.Demo --out $(DEMOSEED) --loops 200 --pause-ms 120 > /dev/null &
 	@sleep 1
+	@test -f $(DEMOLOG) || { echo "emitter 가 $(DEMOLOG) 를 만들지 않았습니다"; exit 1; }
 	@cd viewer && $(PYTHON) -m loglens --source file --file ../$(DEMOLOG) --follow \
 		--config examples/sample-app.json
 
