@@ -34,9 +34,10 @@ make viewer     # 가짜 로그를 만들어서 뷰어 실행 → http://127.0.0
 실제 라이브러리가 로그를 찍는 걸 보려면:
 
 ```bash
-make demo       # Java 라이브러리 → 파일 → 뷰어  (전 구간 연결)
+make demo       # 진짜 라이브러리 → 파일 → 뷰어  (전 구간 연결)
 make emit       # 로그가 어떤 모양으로 찍히는지 터미널에서 확인
 make test       # 전체 검증 (뷰어 + 라이브러리 + 양쪽 대조)
+make aar        # 배포용 .aar 생성
 ```
 
 ---
@@ -72,42 +73,66 @@ make test       # 전체 검증 (뷰어 + 라이브러리 + 양쪽 대조)
 
 ## (A) 로깅 라이브러리
 
-```java
+```kotlin
 // 앱 시작할 때 한 줄
-LogLensAndroid.install(this);
+LogLensAndroid.install(this)
 
-// 실제 호출부
-LogLens.i(AppDomain.AUTH, "LOGIN_OK", "uid", uid, "msg", "로그인 성공");
-LogLens.e(AppDomain.NET, "SOCKET_FAIL", e, "host", host);
-LogLens.d(AppDomain.CHAT, "ROOM_ENTER");
+// 실제 호출부 — Kotlin
+LogLens.i(AppDomain.AUTH, "LOGIN_OK", "uid" to uid, "msg" to "로그인 성공")
+LogLens.e(AppDomain.NET, "SOCKET_FAIL", e, "host" to host)
+LogLens.d(AppDomain.CHAT, "ROOM_ENTER")
 ```
+
+**자바에서도 그대로 씁니다.** 라이브러리는 Kotlin 이지만 자바용 API 를 따로 냅니다.
+
+```java
+LogLens.i(AppDomainJava.AUTH, "LOGIN_OK", "uid", uid, "msg", "로그인 성공");
+LogLens.e(AppDomainJava.NET, "SOCKET_FAIL", e, "host", host);
+```
+
+Kotlin 쪽은 `"uid" to uid` 라서 **키-값 짝이 컴파일 시점에 보장**됩니다 — 인자 개수를
+홀수로 쓰는 실수 자체가 불가능합니다. 자바에는 `to` 같은 문법이 없어서, 같은 API 를
+쓰려면 필드마다 `new Pair<>()` 를 써야 합니다. 자바가 대부분인 프로젝트에서는 마찰이
+크기 때문에 기존 가변 인자 형태를 그대로 남겨 뒀습니다.
 
 ### 도메인 목록은 앱이 직접 정합니다
 
 이게 "어느 프로젝트에나 붙는다"의 핵심입니다. 도메인 목록은 프로젝트마다 다른데,
 라이브러리 안에 enum으로 박아 넣으면 그 순간 다른 프로젝트에서 못 씁니다.
 
-```java
+```kotlin
 // 라이브러리 쪽 — 도메인이 뭔지 모릅니다
-public interface LogDomain { String tag(); }
+fun interface LogDomain { fun tag(): String }
 
 // 앱 쪽 — 자기 도메인을 정의합니다
-public enum AppDomain implements LogDomain {
+enum class AppDomain : LogDomain {
     AUTH, CHAT, NET, FILE_XFER;
-    public String tag() { return "APP_" + name(); }
+    override fun tag() = "APP_$name"
 }
 ```
+
+자바 프로젝트용 예시도 `lib/sample-domains` 에 같이 들어 있습니다
+(`AppDomainJava.java`). 둘 중 맞는 걸 복사해 쓰면 됩니다.
 
 ### 구성
 
 | 모듈 | 내용 | 필요한 것 |
 |---|---|---|
-| `lib/core` | `LogLens`(호출부가 쓰는 진입점), 포매터, 값 정리, 마스킹, 길이 자르기, 파일 저장 | **없음** (순수 자바) |
+| `lib/core` | `LogLens`(호출부가 쓰는 진입점), 포매터, 값 정리, 마스킹, 길이 자르기, 파일 저장 | Kotlin stdlib 만 |
 | `lib/android` | logcat 출력, 앱 초기화 도우미 | Android |
-| `lib/sample-domains` | 도메인 정의 예시 — 배포하지 않습니다 | core |
+| `lib/sample-domains` | 도메인 정의 예시 (Kotlin + Java) — 배포하지 않습니다 | core |
 
 `core`가 안드로이드를 전혀 참조하지 않는 건 의도한 겁니다. 그래야 일반 JVM에서
 바로 테스트할 수 있고, 뷰어 파서와 서로 대조하는 검증도 돌릴 수 있습니다.
+
+### 붙이는 법
+
+```bash
+make aar    # → lib/android/build/outputs/aar/loglens-release.aar  (37KB)
+```
+
+`.aar` 하나에 core 까지 전부 들어 있습니다. 앱의 `libs/` 에 넣고 gradle 에 한 줄
+추가하면 됩니다. Kotlin stdlib 외에 다른 의존성은 없습니다.
 
 ### 호출부가 신경 쓰지 않아도 되는 것들
 
@@ -236,12 +261,12 @@ OpenTelemetry나 Sentry 같은 도구도 성질이 같습니다. 넣은 만큼 �
 그래서 진짜 검증은 이렇게 합니다:
 
 ```
-Java 라이브러리가 만든 줄  →  Python 파서로 읽기  →  필드가 같은지 비교
+Kotlin 라이브러리가 만든 줄  →  Python 파서로 읽기  →  필드가 같은지 비교
 ```
 
 ```bash
 make roundtrip
-# roundtrip: 26 passed, 0 failed  (EXACT 22, TRUNC 4)
+# roundtrip: 28 passed, 0 failed  (EXACT 24, TRUNC 4)
 ```
 
 기대값은 라이브러리 출력을 되읽어서 만들지 않고, 입력값에서 따로 계산합니다.
@@ -256,12 +281,12 @@ make roundtrip
 | | |
 |---|---|
 | 뷰어 (파서·집계·설정·자동생성) | 67개 테스트 통과 |
-| 라이브러리 core | 242개 검사 통과 (javac 21) |
-| 양쪽 대조 | 26개 케이스 통과 |
+| 라이브러리 core | 61개 테스트 통과 (Kotlin, kotlin.test) |
+| 양쪽 대조 | 28개 케이스 통과 (Kotlin·Java 두 API 모두) |
 | `--source adb` + `--init` | **실제 기기로 확인** (연결·앱 추적·스트리밍·설정 자동생성) |
 | `make demo` (라이브러리→파일→뷰어) | **실행 확인** |
-| `lib/android` | **컴파일 확인** (android-36). 기기에서 실행은 아직 |
-| gradle 빌드 | **미확인.** gradle 래퍼가 없어서, 지금은 소스 복사나 로컬 모듈로 붙입니다 |
+| `lib/android` · `.aar` | **빌드 확인** (AGP 8.7.3 / Kotlin 2.0.21). 기기에서 실행은 아직 |
+| gradle 빌드 | **확인.** `make aar` 로 37KB 짜리 .aar 이 나옵니다 |
 | 브라우저 화면 | JS 문법·DOM 연결·API 응답 모양은 테스트. **눈으로 확인은 아직** |
 
 자세한 내용과 초안에서 바뀐 이유 → [docs/DECISIONS.md](docs/DECISIONS.md)

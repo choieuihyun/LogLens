@@ -1,9 +1,40 @@
-// 라이브러리만 독립적으로 빌드한다. 뷰어(Python)는 gradle 과 무관하다.
+// 라이브러리 빌드는 lib/ 을 루트로 합니다. 뷰어(Python)와 문서까지
+// gradle 이 훑을 이유가 없어서 저장소 루트와 분리했습니다.
 //
-// 주의: 이 파일들은 이 저장소가 만들어진 환경에서 **검증되지 않았다**
-// (gradle / Android SDK 부재). core 모듈은 순수 자바라 `make test-lib` 로
-// javac 만으로 컴파일·테스트된다. android 모듈은 소스만 있고 미컴파일 상태다.
+//   ./gradlew :android:assembleRelease   →  배포용 .aar
+//   ./gradlew test                       →  전체 테스트
+//   ./gradlew :roundtrip:run             →  뷰어 파서와 대조할 로그 생성
+
+pluginManagement {
+    repositories {
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
 
 rootProject.name = "loglens"
 
+// :core     순수 Kotlin/JVM. 안드로이드를 모릅니다. 테스트가 여기 붙습니다.
+// :android  배포용 .aar. core 소스까지 함께 컴파일해 하나로 완결됩니다.
 include(":core", ":android", ":sample-domains")
+
+// 저장소 다른 곳에 있는 것들도 gradle 모듈로 끌어옵니다.
+include(":roundtrip")
+project(":roundtrip").projectDir = file("../tools/roundtrip")
+include(":demo")
+project(":demo").projectDir = file("../sample-app/jvm")
