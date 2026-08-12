@@ -430,13 +430,13 @@ footer{
   <header class="masthead">
     <div>
       <h1>Log<span class="lens">Lens</span> 아키텍처</h1>
-      <p class="sub">도메인 기반 구조화 로깅 표준과 그 전용 뷰어가
-      실제로 어떻게 도는가 — call site 에서 브라우저 픽셀까지.</p>
+      <p class="sub">앱이 로그를 찍는 순간부터 브라우저 화면에 뜨기까지,
+      한 줄이 어떤 경로로 흐르고 각 단계에서 무엇이 보장되는지.</p>
     </div>
     <div class="meta">
-      emitter <b>순수 자바</b> · 무의존<br>
-      viewer <b>Python 3.8+</b> · 표준 라이브러리만<br>
-      계약 <b>한 줄 텍스트</b> · 코드 의존 없음<br>
+라이브러리 <b>순수 자바</b> · 외부 의존 없음<br>
+      뷰어 <b>Python 3.8+</b> · 표준 라이브러리만<br>
+      공유하는 것 <b>로그 한 줄 형식</b>뿐<br>
       검증 <b>67 + 242 + 26</b>
     </div>
   </header>
@@ -445,17 +445,17 @@ footer{
     <div class="rail-label">Contents</div>
     <ol>
       <li><a href="#s0"><span class="n">00</span><span>전제</span></a></li>
-      <li><a href="#s1"><span class="n">01</span><span>계약 = 한 줄</span></a></li>
+      <li><a href="#s1"><span class="n">01</span><span>로그 한 줄 형식</span></a></li>
       <li><a href="#s2"><span class="n">02</span><span>전체 흐름</span></a></li>
-      <li><a href="#s3"><span class="n">03</span><span>emitter</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span>로그 찍는 쪽</span></a></li>
       <li><a href="#s4"><span class="n">04</span><span>기기에 붙는 법</span></a></li>
       <li><a href="#s5"><span class="n">05</span><span>뷰어 내부</span></a></li>
-      <li><a href="#s6"><span class="n">06</span><span>강등 사다리</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span>형식 위반 처리</span></a></li>
       <li><a href="#s7"><span class="n">07</span><span>기술 스택</span></a></li>
       <li><a href="#s8"><span class="n">08</span><span>검증 구조</span></a></li>
       <li><a href="#s9"><span class="n">09</span><span>한계</span></a></li>
       <li><a href="#s10"><span class="n">10</span><span>0 → 1</span></a></li>
-      <li><a href="#s11"><span class="n">11</span><span>요구 조건 · 리스크</span></a></li>
+      <li><a href="#s11"><span class="n">11</span><span>요구 조건 · 한계</span></a></li>
     </ol>
   </nav>
 
@@ -463,22 +463,21 @@ footer{
 
   <!-- ══════════════════════════════════════════ 00 -->
   <section id="s0">
-    <p class="lead">뷰어와 분석은 찍힌 로그만큼만 좋아진다. 아무리 좋은 뷰어도
-    잡다한 로그 위에선 잡다하게 보인다. 그래서 진짜 레버리지는 뷰어가 아니라
-    <strong>로그를 규격대로 찍게 만드는 쪽</strong>에 있고, 뷰어는 그 규격을
-    착취하는 소비 도구다.</p>
+    <p class="lead">로그가 지저분하면 아무리 좋은 뷰어를 써도 지저분하게 보입니다.
+    그래서 이 프로젝트는 뷰어보다 <strong>로그를 정해진 형식으로 찍게 만드는 쪽</strong>에
+    더 무게를 뒀습니다. 뷰어는 그 형식을 활용해서 필터링하고 집계하는 쪽입니다.</p>
 
-    <p>이 판단이 구조를 결정했다. 컴포넌트는 둘인데, 둘 사이에
-    <strong>코드 의존이 없다</strong>. 공유하는 건 가운데의 한 줄 텍스트 규격뿐이다.
-    라이브러리를 코틀린으로 다시 쓰든 뷰어를 Go 로 옮기든 반대쪽은 알 필요가 없다.</p>
+    <p>이 판단이 구조를 결정했습니다. 컴포넌트는 둘인데 <strong>서로의 코드를 전혀
+    참조하지 않습니다.</strong> 공유하는 건 가운데의 로그 한 줄 형식뿐입니다.
+    라이브러리를 코틀린으로 다시 쓰든 뷰어를 Go 로 옮기든 반대쪽은 알 필요가 없습니다.</p>
   </section>
 
   <!-- ══════════════════════════════════════════ 01 -->
   <section id="s1">
-    <h2><span class="n">01</span>계약 — 한 줄이 전부다</h2>
+    <h2><span class="n">01</span>로그 한 줄의 형식</h2>
 
-    <p>emitter 와 뷰어가 공유하는 유일한 것. 이 줄의 어느 부분이 계약이고 어느
-    부분이 아닌지를 구분하는 게 설계의 첫 단추였다.</p>
+    <p>라이브러리와 뷰어가 공유하는 유일한 것입니다. 이 줄의 어느 부분이 약속이고
+    어느 부분이 아닌지를 구분하는 게 설계의 첫 단추였습니다.</p>
 
     <figure>
       <div class="frame">
@@ -496,7 +495,7 @@ footer{
           <!-- 브래킷: 접두사 -->
           <path class="d-dash" d="M16 48 V58 H262 V48" />
           <text class="d-t-s" x="139" y="76" text-anchor="middle">접두사</text>
-          <text class="d-t-s" x="139" y="92" text-anchor="middle">계약 아님</text>
+          <text class="d-t-s" x="139" y="92" text-anchor="middle">약속 아님</text>
 
           <!-- 브래킷: 태그 -->
           <path class="d-ln-a" d="M272 48 V58 H342 V48" />
@@ -505,7 +504,7 @@ footer{
 
           <!-- 브래킷: 본문 -->
           <path class="d-ln-a" d="M354 48 V58 H613 V48" />
-          <text class="d-t-a" x="483" y="76" text-anchor="middle">본문 — 이것이 계약</text>
+          <text class="d-t-a" x="483" y="76" text-anchor="middle">본문 — 여기가 약속</text>
 
           <!-- 하단 설명 -->
           <line class="d-dash" x1="16" y1="112" x2="684" y2="112" />
@@ -518,34 +517,34 @@ footer{
           <text class="d-t-s" x="152" y="178">adb logcat -s APP_AUTH:*  가 우리 도구 없이도 도메인 필터가 된다.</text>
         </svg>
       </div>
-      <figcaption><b>계약은 본문뿐이다.</b> 접두사를 계약에 넣으려던 초안의 단일
-      정규식은 틀렸다 — <code>adb logcat</code> 의 표준 포맷들은 연도를 찍지 않는데
-      초안은 <code>\d{4}-\d\d-\d\d</code> 를 요구했다.</figcaption>
+      <figcaption><b>약속은 본문뿐입니다.</b> 줄 앞부분까지 하나의 정규식으로 잡으려던
+      초안은 틀렸습니다 — <code>adb logcat</code> 의 표준 출력 형식은 연도를 안 찍는데
+      초안은 <code>\d{4}-\d\d-\d\d</code> 를 요구했습니다.</figcaption>
     </figure>
 
-    <h3>불변식 넷</h3>
+    <h3>반드시 지켜야 하는 규칙 네 가지</h3>
     <ul>
-      <li><strong>태그 = <code>&lt;PREFIX&gt;_&lt;DOMAIN&gt;</code></strong> — 도메인을 본문에
-      넣는 흔한 래퍼(<code>Log.d("APP", "[AUTH] …")</code>)는 그 순간 logcat 태그 필터를
-      무력화한다. 태그 자리에 두면 도메인 필터가 공짜다.</li>
-      <li><strong>한 줄 = 한 레코드.</strong> 여러 줄로 쪼개면 멀티스레드 환경에서
-      다른 스레드 로그가 사이에 끼어 복구가 불가능해진다.</li>
-      <li><strong>값에 공백·<code>|</code>·개행 없음.</strong> 개행이 진짜 파서 킬러다.</li>
-      <li><strong>파서는 예외를 던지지 않는다.</strong> 규격 위반은 실패가 아니라 강등이다.</li>
+      <li><strong>태그는 <code>&lt;접두사&gt;_&lt;도메인&gt;</code></strong> — 도메인을 본문에
+      적는 방식(<code>Log.d("APP", "[AUTH] …")</code>)은 모든 로그의 태그를 <code>APP</code>
+      하나로 만들어서 logcat 태그 필터를 무의미하게 만듭니다. 태그 자리에 두면 도메인 필터가 공짜로 따라옵니다.</li>
+      <li><strong>로그 한 줄이 레코드 하나.</strong> 여러 줄로 쪼개면 멀티스레드 환경에서
+      다른 스레드 로그가 사이에 끼어 복구할 방법이 없습니다.</li>
+      <li><strong>값에 공백, <code>|</code>, 줄바꿈이 안 들어갑니다.</strong> 줄바꿈이 특히 파서를 깨뜨립니다.</li>
+      <li><strong>파서는 예외를 던지지 않습니다.</strong> 형식에 안 맞는 줄은 버리는 게 아니라 등급을 낮춥니다.</li>
     </ul>
 
     <div class="log"><span class="ts">2026-08-12 11:41:24.930</span> <span class="lv-I">I</span>/<span class="tag">APP_AUTH</span>: <span class="evt">evt=TOKEN_ISSUE</span> <span class="k">flowId</span>=f9254 <span class="k">token</span>=<span class="mask">***</span> <span class="k">expiresIn</span>=3600 <span class="k">authType</span>=oauth2
 <span class="cmt">                                                        ↑ 가려짐                        ↑ 안 가려짐</span></div>
 
-    <p><code>token</code> 은 가려졌고 <code>authType</code> 은 안 가려졌다. 마스킹이
-    <strong>정확 키 매칭</strong>이어야 하는 이유다 — 부분 일치로 가리면 <code>auth</code> 가
-    <code>authType</code> 까지 먹어치우고, 그러면 개발자가 마스킹을 우회하기 시작한다.
-    그게 진짜 사고로 이어진다.</p>
+    <p><code>token</code> 은 가려졌고 <code>authType</code> 은 그대로입니다.
+    민감한 값을 가릴 때 <strong>키 이름이 정확히 일치할 때만</strong> 가리기 때문입니다.
+    <code>auth</code> 가 들어간 키를 전부 가리는 식으로 만들면 <code>authType</code> 같은
+    멀쩡한 필드까지 안 보이게 되고, 그러면 개발자가 마스킹을 우회하기 시작합니다.</p>
   </section>
 
   <!-- ══════════════════════════════════════════ 02 -->
   <section id="s2">
-    <h2><span class="n">02</span>전체 흐름과 세 개의 경계</h2>
+    <h2><span class="n">02</span>전체 흐름과 세 군데 경계</h2>
 
     <figure>
       <div class="frame">
@@ -580,8 +579,8 @@ footer{
 
           <rect class="d-box-a" x="16" y="112" width="120" height="62" rx="3" />
           <text class="d-t-a" x="76" y="132" text-anchor="middle">라이브러리</text>
-          <text class="d-t-s" x="76" y="147" text-anchor="middle">정화·마스킹</text>
-          <text class="d-t-s" x="76" y="161" text-anchor="middle">·절단</text>
+          <text class="d-t-s" x="76" y="147" text-anchor="middle">값 정리·마스킹</text>
+          <text class="d-t-s" x="76" y="161" text-anchor="middle">·길이 자르기</text>
 
           <rect class="d-box" x="196" y="112" width="130" height="62" rx="3" />
           <text class="d-t" x="261" y="138" text-anchor="middle">logcat</text>
@@ -594,7 +593,7 @@ footer{
           <!-- PC 쪽 -->
           <rect class="d-box" x="404" y="112" width="96" height="62" rx="3" />
           <text class="d-t" x="452" y="138" text-anchor="middle">Source</text>
-          <text class="d-t-s" x="452" y="154" text-anchor="middle">재연결</text>
+          <text class="d-t-s" x="452" y="154" text-anchor="middle">자동 재연결</text>
 
           <rect class="d-box" x="524" y="112" width="96" height="62" rx="3" />
           <text class="d-t" x="572" y="138" text-anchor="middle">Parser</text>
@@ -603,7 +602,7 @@ footer{
           <rect class="d-box-a" x="644" y="112" width="96" height="62" rx="3" />
           <text class="d-t-a" x="692" y="132" text-anchor="middle">Hub</text>
           <text class="d-t-s" x="692" y="147" text-anchor="middle">링버퍼</text>
-          <text class="d-t-s" x="692" y="161" text-anchor="middle">+ 이슈트레이</text>
+          <text class="d-t-s" x="692" y="161" text-anchor="middle">+ 이슈 목록</text>
 
           <path class="d-ln-a" d="M330 143 H400" marker-end="url(#ah-a)" />
           <path class="d-ln" d="M504 143 H520" marker-end="url(#ah)" />
@@ -625,17 +624,17 @@ footer{
           <text class="d-t-s" x="392" y="56" text-anchor="middle">--source file 로 재생</text>
         </svg>
       </div>
-      <figcaption><b>같은 한 줄 규격이 logcat 과 파일 양쪽에 쓰인다.</b> 그래서 파서
-      하나가 실시간 스트림과 저장된 덤프를 모두 읽는다.</figcaption>
+      <figcaption><b>같은 형식을 logcat 과 파일 양쪽에 씁니다.</b> 그래서 파서 하나로
+      실시간 스트림과 저장된 로그를 모두 읽을 수 있습니다.</figcaption>
     </figure>
 
     <div class="tw">
       <table>
         <thead><tr><th>경계</th><th>넘어가는 것</th><th>보장</th></tr></thead>
         <tbody>
-          <tr><td class="mono">앱 → logcat</td><td>정화·마스킹·절단이 끝난 한 줄</td><td>개행 없음, 4KB 이내, PII 마스킹 완료</td></tr>
-          <tr><td class="mono">기기 → PC</td><td><code>adb logcat -v threadtime</code> 텍스트</td><td>포맷 고정, 끊기면 자동 재연결</td></tr>
-          <tr><td class="mono">서버 → 브라우저</td><td>파싱된 레코드의 JSON 배치</td><td>100ms 배치, 느린 구독자는 드롭</td></tr>
+          <tr><td class="mono">앱 → logcat</td><td>값 정리·마스킹·길이 자르기가 끝난 한 줄</td><td>줄바꿈 없음, 4KB 이내, 민감 정보 가려짐</td></tr>
+          <tr><td class="mono">기기 → PC</td><td><code>adb logcat -v threadtime</code> 텍스트</td><td>출력 형식 고정, 끊기면 자동 재연결</td></tr>
+          <tr><td class="mono">서버 → 브라우저</td><td>파싱된 레코드를 JSON 으로 묶은 것</td><td>100ms 씩 묶어 전송, 못 따라오면 오래된 것부터 버림</td></tr>
         </tbody>
       </table>
     </div>
@@ -643,39 +642,41 @@ footer{
 
   <!-- ══════════════════════════════════════════ 03 -->
   <section id="s3">
-    <h2><span class="n">03</span>emitter — 단계 순서에 이유가 있다</h2>
+    <h2><span class="n">03</span>로깅 라이브러리 — 처리 순서에 이유가 있다</h2>
 
-    <div class="log"><span class="cmt">// call site 가 보는 전부</span>
+    <div class="log"><span class="cmt">// 호출부가 쓰는 전부</span>
 LogLens.i(AppDomain.AUTH, <span class="evt">"LOGIN_OK"</span>, <span class="k">"uid"</span>, uid, <span class="k">"msg"</span>, <span class="msg">"로그인 성공"</span>);
 LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class="k">"host"</span>, host);</div>
 
     <ol class="steps">
-      <li><span class="s-n">01</span><span class="s-b"><b>레벨 게이팅</b>
-        <span>맨 앞이어야 한다. 릴리스에서 <code>d()</code> 는 varargs 배열 하나만 만들고 즉시 반환한다 —
-        문자열 연결도, 정화도, 마스킹도 없다. 로깅 표준이 성능 때문에 거부당하는 걸 막는 가장 값싼 방법.</span></span></li>
-      <li><span class="s-n">02</span><span class="s-b"><b>포맷 · 정화</b>
-        <span>키 검증, 값에서 공백→<code>_</code>, <code>|</code>→<code>/</code>, 개행→리터럴 이스케이프.
-        빈 값은 센티널 <code>-</code> — <code>k=</code> 는 문법 위반이라 레코드 전체를 강등시킨다.</span></span></li>
+      <li><span class="s-n">01</span><span class="s-b"><b>레벨 확인</b>
+        <span>맨 앞이어야 합니다. 릴리스 빌드에서 <code>d()</code> 를 부르면 인자 배열 하나만 만들고
+        바로 돌아옵니다 — 문자열을 잇지도, 값을 정리하지도, 마스킹하지도 않습니다.
+        로깅 표준이 "느려진다"는 이유로 거부당하는 걸 막는 가장 싼 방법입니다.</span></span></li>
+      <li><span class="s-n">02</span><span class="s-b"><b>문자열 조립 · 값 정리</b>
+        <span>키가 규칙에 맞는지 확인하고, 값에서 공백은 <code>_</code> 로, <code>|</code> 는 <code>/</code> 로,
+        줄바꿈은 문자 두 개로 바꿉니다. 값이 비면 <code>-</code> 를 넣습니다 —
+        <code>k=</code> 는 형식 위반이라 그 줄 전체가 등급이 낮아집니다.</span></span></li>
       <li><span class="s-n">03</span><span class="s-b"><b>마스킹</b>
-        <span>정화 뒤에 오는 이유: 마스킹 결과(<code>***</code>)도 공백 없는 토큰이어야 계약이 유지된다.
-        순서가 반대면 마스킹 산출물을 다시 검사해야 한다.</span></span></li>
-      <li><span class="s-n">04</span><span class="s-b"><b>절단</b>
-        <span>맨 마지막. 필드를 다 붙인 뒤의 최종 길이라야 의미가 있다.
-        <strong>바이트로 세고 코드포인트로 자른다</strong> — 한글 3바이트, 이모지 4바이트라
-        순진하게 바이트로 자르면 문자가 반으로 갈린다.</span></span></li>
-      <li><span class="s-n">05</span><span class="s-b"><b>싱크 팬아웃</b>
-        <span>logcat · 파일 · (향후) 크래시 리포터. 싱크가 던진 예외는 삼킨다 —
-        로깅이 앱을 죽이면 안 된다.</span></span></li>
+        <span>값 정리 뒤에 오는 이유: 마스킹 결과인 <code>***</code> 도 공백 없는 한 덩어리여야
+        형식이 유지됩니다. 순서가 반대면 마스킹 결과를 다시 검사해야 합니다.</span></span></li>
+      <li><span class="s-n">04</span><span class="s-b"><b>길이 자르기</b>
+        <span>맨 마지막입니다. 필드를 다 붙인 뒤의 최종 길이라야 의미가 있습니다.
+        <strong>바이트 수로 세되 글자 단위로 끊습니다</strong> — 한글은 3바이트, 이모지는 4바이트라
+        바이트 위치로 그냥 자르면 글자가 반으로 갈려 깨집니다.</span></span></li>
+      <li><span class="s-n">05</span><span class="s-b"><b>출력 대상에 전달</b>
+        <span>logcat, 파일, 나중엔 크래시 리포터까지. 출력 중에 예외가 나면 삼킵니다 —
+        로그 때문에 앱이 죽으면 안 되니까요.</span></span></li>
     </ol>
 
-    <h3>도메인은 앱이 공급한다</h3>
-    <p>이게 "어느 프로젝트에나 붙는다"의 전부다. 도메인 목록은 프로젝트의 정체성이라
-    라이브러리에 enum 으로 박는 순간 재사용이 끝난다.</p>
+    <h3>도메인 목록은 앱이 정합니다</h3>
+    <p>이게 "어느 프로젝트에나 붙는다"의 핵심입니다. 도메인 목록은 프로젝트마다 다른데,
+    라이브러리 안에 enum 으로 박아 넣으면 그 순간 다른 프로젝트에서 못 씁니다.</p>
 
-    <pre class="code"><span class="cmt">// 라이브러리 — 도메인을 모른다</span>
+    <pre class="code"><span class="cmt">// 라이브러리 — 도메인이 뭔지 모릅니다</span>
 <span class="kw">public interface</span> LogDomain { String tag(); }
 
-<span class="cmt">// 앱 — 자기 도메인을 정의한다</span>
+<span class="cmt">// 앱 — 자기 도메인을 정의합니다</span>
 <span class="kw">public enum</span> AppDomain <span class="kw">implements</span> LogDomain {
     AUTH, CHAT, NET, FILE_XFER;
     <span class="kw">public</span> String tag() { <span class="kw">return</span> <span class="evt">"APP_"</span> + name(); }
@@ -683,26 +684,28 @@ LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class
 
     <div class="note">
       <span class="tagline">모듈 경계</span>
-      <p><code>lib/core</code> 는 <strong>안드로이드를 모른다.</strong> 순수 자바다.
-      덕분에 일반 JVM 에서 <code>javac</code> 만으로 테스트되고, 뷰어 파서와의
-      왕복 검증(§08)을 실제로 돌릴 수 있다. 이게 결정적이었다.</p>
+      <p><code>lib/core</code> 는 <strong>안드로이드를 전혀 참조하지 않습니다.</strong> 순수 자바입니다.
+      덕분에 일반 JVM 에서 <code>javac</code> 만으로 테스트할 수 있고, 뷰어 파서와 서로
+      대조하는 검증(§08)도 실제로 돌릴 수 있습니다. 이게 컸습니다.</p>
     </div>
 
     <div class="bug">
       <span class="tagline">함정 — 실제로 밟음</span>
       <p>라이브러리 모듈의 <code>BuildConfig.DEBUG</code> 는 <strong>그 라이브러리의</strong>
-      빌드타입이라, 앱이 release 여도 true 일 수 있다. 릴리스 앱에서 V/D 로그가 통째로 샌다.</p>
-      <p>→ 앱이 <code>init(isDebug)</code> 로 주입하거나 <code>FLAG_DEBUGGABLE</code> 을 런타임에 읽는다.
-      초기화 전 기본값은 <strong>디버그 아님</strong> — 잊었을 때 새는 것보다 빠지는 게 안전하다.</p>
+      빌드 타입이라, 앱을 release 로 빌드해도 true 로 남을 수 있습니다.
+      그러면 릴리스 앱에서 V/D 로그가 전부 새어 나갑니다.</p>
+      <p>→ 앱이 <code>init(isDebug)</code> 로 직접 알려주거나, <code>FLAG_DEBUGGABLE</code> 을 실행 중에 읽습니다.
+      초기화 전 기본값은 <strong>디버그 아님</strong>입니다. 깜빡했을 때 로그가 새는 것보다 안 찍히는 게 안전하니까요.</p>
     </div>
   </section>
 
   <!-- ══════════════════════════════════════════ 04 -->
   <section id="s4">
-    <h2><span class="n">04</span>뷰어가 기기에 붙는 원리</h2>
+    <h2><span class="n">04</span>뷰어가 기기에 붙는 방법</h2>
 
-    <p>웹 GUI 를 원하는데 브라우저 샌드박스는 USB·adb 소켓·임의 프로세스 실행을 막는다.
-    WebUSB 로도 안 된다 — adb 서버가 이미 기기를 독점하고 있다.</p>
+    <p>웹 화면으로 보고 싶은데, 브라우저 보안 정책이 USB·adb 소켓·프로그램 실행을 전부 막습니다.
+    WebUSB 라는 게 있지만 안드로이드 ADB 인터페이스에는 접근할 수 없고, 애초에 adb 서버가
+    이미 기기를 독점하고 있습니다.</p>
 
     <figure>
       <div class="frame">
@@ -730,20 +733,20 @@ LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class
           <path class="d-ln-x" stroke-dasharray="5 4" d="M140 52 H556" />
           <line class="d-ln-x" x1="336" y1="40" x2="360" y2="64" />
           <line class="d-ln-x" x1="360" y1="40" x2="336" y2="64" />
-          <text class="d-t-s" x="348" y="86" text-anchor="middle" style="fill:var(--lv-e)">샌드박스</text>
+          <text class="d-t-s" x="348" y="86" text-anchor="middle" style="fill:var(--lv-e)">브라우저 보안 정책</text>
 
           <!-- 구분 -->
           <line class="d-dash" x1="16" y1="108" x2="744" y2="108" />
 
           <!-- 아래: 브리지 -->
-          <text class="d-t-a" x="16" y="132">로컬 브리지</text>
+          <text class="d-t-a" x="16" y="132">중간에 프로그램을 두면</text>
           <rect class="d-box" x="16" y="144" width="120" height="60" rx="3" />
           <text class="d-t" x="76" y="170" text-anchor="middle">브라우저</text>
           <text class="d-t-s" x="76" y="186" text-anchor="middle">HTTP 만</text>
 
           <rect class="d-box-a" x="290" y="144" width="150" height="60" rx="3" />
-          <text class="d-t-a" x="365" y="168" text-anchor="middle">로컬 프로세스</text>
-          <text class="d-t-s" x="365" y="184" text-anchor="middle">파싱 · 링버퍼 · 서버</text>
+          <text class="d-t-a" x="365" y="168" text-anchor="middle">PC 의 파이썬 프로그램</text>
+          <text class="d-t-s" x="365" y="184" text-anchor="middle">읽기 · 파싱 · 서버</text>
 
           <rect class="d-box" x="590" y="144" width="120" height="60" rx="3" />
           <text class="d-t" x="650" y="170" text-anchor="middle">기기 / USB</text>
@@ -757,52 +760,55 @@ LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class
           <text class="d-t-s" x="515" y="166" text-anchor="middle">adb logcat</text>
           <text class="d-t-s" x="515" y="196" text-anchor="middle">subprocess</text>
 
-          <text class="d-t-s" x="16" y="226">Electron 도, 파일 주입도 필요 없다. 브라우저는 자기가 할 수 있는 일(HTTP)만 하고, USB 는 로컬 프로세스가 본다.</text>
+          <text class="d-t-s" x="16" y="226">Electron 도, 파일로 옮기는 것도 필요 없습니다. 브라우저는 HTTP 만 하고, USB 는 PC 프로그램이 봅니다.</text>
         </svg>
       </div>
-      <figcaption><b>브라우저 제약을 우회하는 게 아니라, 할 수 있는 일만 시킨다.</b>
-      통역은 로컬 프로세스 몫이다.</figcaption>
+      <figcaption><b>브라우저 제약을 뚫는 게 아니라, 브라우저가 할 수 있는 일만 시킵니다.</b>
+      통역은 PC 프로그램이 맡습니다.</figcaption>
     </figure>
 
-    <h3>adb 서브프로세스에서 의도적으로 고정한 것 넷</h3>
+    <h3>adb 를 실행할 때 일부러 고정한 것 네 가지</h3>
     <div class="tw">
       <table>
         <thead><tr><th>고정값</th><th>안 하면</th></tr></thead>
         <tbody>
-          <tr><td class="mono">-v threadtime</td><td>adb 기본 포맷은 버전·환경마다 다르다. 어느 날 남의 PC 에서 파서가 조용히 깨진다.</td></tr>
-          <tr><td class="mono">errors="replace"</td><td>기기가 깨진 바이트를 뱉으면 스트림 전체가 죽는다. 한 줄 손상은 감수하고 파이프라인은 돌린다.</td></tr>
-          <tr><td class="mono">bufsize=1</td><td>4KB 블록이 찰 때까지 로그가 안 나온다. "버튼 누르면 바로 뜬다"가 이 도구의 존재 이유다.</td></tr>
-          <tr><td class="mono">pidof 재확인</td><td>앱이 재시작되면 pid 가 바뀐다. 연결할 때마다 다시 푼다.</td></tr>
+          <tr><td class="mono">-v threadtime</td><td>adb 기본 형식은 버전·환경마다 다릅니다. 기본값에 맡기면 어느 날 다른 사람 PC 에서 파서가 조용히 깨집니다.</td></tr>
+          <tr><td class="mono">errors="replace"</td><td>기기가 깨진 바이트를 내보내도 스트림이 죽으면 안 됩니다. 한 줄 망가지는 건 감수하고 나머지는 계속 읽습니다.</td></tr>
+          <tr><td class="mono">bufsize=1</td><td>4KB 가 찰 때까지 로그가 안 나옵니다. "버튼 누르면 바로 뜬다"가 이 도구를 만든 이유입니다.</td></tr>
+          <tr><td class="mono">pidof 재확인</td><td>앱을 재시작하면 프로세스 ID 가 바뀝니다. 연결할 때마다 다시 찾습니다.</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="note">
-      <span class="tagline">pid 필터가 결정적이다</span>
-      <p>실제 사내 앱에 붙여보니, 대상 앱 pid 로 거르는 것만으로 시스템·타앱 태그
-      <strong>140여 종이 한 번에 사라지고</strong> 앱이 찍은 태그 여덟 개만 남았다.
-      이 신호 없이는 화면이 쓸모가 없다.</p>
-      <p>단, <strong>이슈를 클릭한 상태에서는 pid 필터를 양보한다.</strong> ANR 은 앱이 아니라
-      <code>ActivityManager</code>(system_server)가 찍기 때문에, pid 로 거르면 방금 클릭한
-      이슈가 화면에서 사라진다.</p>
+      <span class="tagline">앱 ID 필터가 결정적입니다</span>
+      <p>실제 사내 앱에 붙여 봤더니, 대상 앱 ID 로 거르는 것만으로 시스템·다른 앱 태그
+      <strong>140여 종이 한 번에 사라지고</strong> 그 앱이 찍은 태그 여덟 개만 남았습니다.
+      이 필터가 없으면 화면이 쓸모가 없습니다.</p>
+      <p>다만 <strong>이슈를 클릭해서 보는 중에는 이 필터를 끕니다.</strong> ANR 은 앱이 아니라
+      <code>ActivityManager</code>(시스템 프로세스)가 찍기 때문에, 앱 ID 로 거르면 방금 클릭한
+      이슈가 화면에서 사라집니다.</p>
     </div>
 
-    <h3>재연결은 예외가 아니라 정상 동작</h3>
-    <p>기기 sleep, USB 재연결, 앱 재시작, <code>adb kill-server</code>. 스트림은 끊긴다.
-    이걸 상위 레이어가 알게 하면 <em>모든</em> 레이어가 재연결을 알아야 한다.</p>
-    <p>그래서 소스가 무한 제너레이터다. 소비자는 그냥 <code>for line in source.lines()</code>
-    이고 끊김을 모른다. 상태 변화는 <code>--------- loglens: …</code> 마커 줄로 흘려보낸다 —
-    파서가 RAW 로 처리하고 Hub 가 가로채 UI 상태줄로 올린다. <strong>별도 채널이 필요 없다.</strong></p>
+    <h3>재연결은 예외 상황이 아니라 평소 동작입니다</h3>
+    <p>기기가 잠들거나, USB 를 다시 꽂거나, 앱을 재시작하거나, <code>adb kill-server</code> 를 하면
+    스트림이 끊깁니다. 이걸 위쪽 코드가 알게 하면 <em>모든</em> 계층이 재연결을 처리해야 합니다.</p>
+    <p>그래서 로그를 읽는 쪽을 끝나지 않는 반복문으로 만들었습니다. 쓰는 쪽은 그냥
+    <code>for line in source.lines()</code> 이고 끊김을 모릅니다. 상태 변화는
+    <code>--------- loglens: …</code> 같은 특별한 줄로 흘려보냅니다 — 파서는 이걸 형식에 안 맞는
+    줄로 처리하고, Hub 가 가로채서 화면 상태 표시줄에 올립니다.
+    <strong>별도 통로를 만들 필요가 없습니다.</strong></p>
 
-    <p>같은 인터페이스 뒤에 소스가 셋 있다. 이 이음매 덕분에 <strong>기기 없이 뷰어 전체를
-    개발·테스트·데모</strong>할 수 있고, 로드맵의 세션 저장/재생이 붙을 자리도 이미 있다.</p>
+    <p>로그를 어디서 읽을지가 같은 인터페이스 뒤에 셋 있습니다. 덕분에 <strong>기기 없이
+    뷰어 전체를 개발하고 테스트하고 시연</strong>할 수 있고, 나중에 세션 저장/재생을 붙일
+    자리도 이미 있습니다.</p>
     <div class="tw">
       <table>
         <thead><tr><th>소스</th><th>쓰임</th></tr></thead>
         <tbody>
-          <tr><td class="mono">adb</td><td>실기기. 재연결·pid추적·포맷고정</td></tr>
-          <tr><td class="mono">file</td><td>저장된 로그 재생 / tail -f</td></tr>
-          <tr><td class="mono">synth</td><td>합성 생성기 — 기기 없이 데모, CI 통합 테스트</td></tr>
+          <tr><td class="mono">adb</td><td>실제 기기. 재연결·앱 추적·형식 고정</td></tr>
+          <tr><td class="mono">file</td><td>저장해 둔 로그 재생 / tail -f</td></tr>
+          <tr><td class="mono">synth</td><td>가짜 로그 생성 — 기기 없이 데모, CI 테스트</td></tr>
         </tbody>
       </table>
     </div>
@@ -810,70 +816,73 @@ LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class
 
   <!-- ══════════════════════════════════════════ 05 -->
   <section id="s5">
-    <h2><span class="n">05</span>뷰어 내부 — 스레드와 백프레셔</h2>
+    <h2><span class="n">05</span>뷰어 내부 — 스레드 구성</h2>
 
     <pre class="code">파이썬 프로세스 (단일)
 │
-├── <span class="kw">Reader 스레드 (1개)</span>
+├── <span class="kw">읽기 스레드 (1개)</span>
 │     for line in source.lines():
 │         hub.ingest(parser.parse(line))
 │
 ├── <span class="kw">Hub</span>  (공유 상태, threading.Lock)
-│     ├── deque(maxlen=20000)   링버퍼
-│     ├── IssueTray             규칙별·그룹키별 카운터
-│     └── [Queue, Queue, ...]   구독자별 큐 (브라우저 탭 하나당 하나)
+│     ├── deque(maxlen=20000)   링버퍼 (꽉 차면 오래된 것부터 밀려남)
+│     ├── IssueTray             규칙별·묶음별 카운터
+│     └── [Queue, Queue, ...]   브라우저 탭마다 큐 하나
 │
 └── <span class="kw">ThreadingHTTPServer</span>
-      ├── GET /api/stream  → 장수명. 큐를 빨아 SSE 로 밀어냄
-      └── 그 외            → 단명. JSON / 정적 파일</pre>
+      ├── GET /api/stream  → 오래 살아있음. 큐에서 꺼내 브라우저로 밀어냄
+      └── 그 외            → 금방 끝남. JSON / 정적 파일</pre>
 
-    <p>파서가 <strong>단일 스레드</strong>인 게 중요하다. 로그는 초당 수천 줄이 올 수
-    있지만 정규식 매칭은 싸고, 순서 보존이 중요하다. 병렬화하면 순서가 깨지고 얻는 게 없다.</p>
+    <p>파싱을 <strong>스레드 하나에서만</strong> 하는 게 중요합니다. 로그는 초당 수천 줄이
+    올 수 있지만 정규식 매칭 자체는 싸고, 순서가 유지되는 게 더 중요합니다.
+    병렬로 돌리면 순서가 깨지는데 얻는 건 없습니다.</p>
 
-    <h3>백프레셔 정책: 느린 구독자를 굶긴다</h3>
+    <h3>브라우저가 못 따라올 때</h3>
     <pre class="code"><span class="kw">for</span> q <span class="kw">in</span> subscribers:
     <span class="kw">try</span>:    q.put_nowait(payload)
     <span class="kw">except</span> Full:
-        q.get_nowait()      <span class="cmt"># ← 가장 오래된 걸 버리고 새 걸 넣는다</span>
+        q.get_nowait()      <span class="cmt"># ← 가장 오래된 걸 버리고 새 걸 넣습니다</span>
         q.put_nowait(payload)</pre>
-    <p>백그라운드 탭이나 멈춘 브라우저 때문에 전체 파이프라인이 막히면 안 된다.
-    로그 뷰어에서 오래된 줄을 잃는 건 감수할 만한 손실이고, 실시간성이 막히는 건 아니다.</p>
+    <p><strong>못 따라오는 탭은 오래된 로그를 잃습니다.</strong> 의도한 동작입니다.
+    백그라운드에 있거나 멈춘 탭 하나 때문에 전체가 막히면 안 되니까요. 로그 뷰어에서
+    오래된 줄 몇 개를 잃는 건 감수할 만하지만, 실시간이 막히는 건 그렇지 않습니다.</p>
 
-    <h3>SSE</h3>
+    <h3>브라우저로 밀어주는 방식 (SSE)</h3>
     <div class="tw">
       <table>
         <thead><tr><th>결정</th><th class="num">값</th><th>이유</th></tr></thead>
         <tbody>
-          <tr><td>배치 주기</td><td class="num">100 ms</td><td>줄마다 이벤트를 보내면 초당 수천 DOM 이벤트로 브라우저가 죽는다. 사람 눈에 100ms 는 즉시다.</td></tr>
-          <tr><td>하트비트</td><td class="num">15 s</td><td><code>: ping</code> 주석 프레임. 유휴 연결을 프록시·브라우저가 끊는 걸 막는다.</td></tr>
-          <tr><td>구독자 큐</td><td class="num">2,000</td><td>넘치면 가장 오래된 것부터 드롭.</td></tr>
-          <tr><td>재연결</td><td class="num">브라우저</td><td><code>EventSource</code> 가 스스로 재접속한다. 서버는 상태 표시만 바꾼다.</td></tr>
+          <tr><td>배치 주기</td><td class="num">100 ms</td><td>줄마다 보내면 초당 수천 개 이벤트가 발생해 브라우저가 버티지 못합니다. 사람 눈에 100ms 는 즉시로 느껴집니다.</td></tr>
+          <tr><td>하트비트</td><td class="num">15 s</td><td>아무것도 안 오가면 중간 프록시나 브라우저가 연결을 끊어 버리는 걸 막습니다.</td></tr>
+          <tr><td>구독자 큐</td><td class="num">2,000</td><td>넘치면 가장 오래된 것부터 버립니다.</td></tr>
+          <tr><td>재연결</td><td class="num">브라우저</td><td><code>EventSource</code> 가 알아서 다시 붙습니다. 서버는 상태 표시만 바꿉니다.</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="bug">
-      <span class="tagline">경합 — API 테스트를 쓰다가 발견</span>
-      <p>원래 순서는 <code>헤더 전송 → subscribe()</code> 였다. 그러면 클라이언트가 헤더를
-      받은 시점과 구독 성립 시점 사이의 레코드를 <strong>조용히 놓친다.</strong>
-      브라우저는 아무 에러도 못 보고 그냥 몇 줄이 빈다 — 사람 눈으로는 절대 안 잡힌다.</p>
-      <p>→ <code>subscribe()</code> 를 헤더보다 앞으로.</p>
+      <span class="tagline">타이밍 문제 — API 테스트를 쓰다가 발견</span>
+      <p>원래 순서는 <code>응답 헤더 전송 → 구독 등록</code> 이었습니다. 그러면 브라우저가
+      헤더를 받은 시점과 서버에 구독이 등록된 시점 사이에 들어온 로그를
+      <strong>조용히 놓칩니다.</strong> 브라우저에는 에러도 안 뜨고 그냥 몇 줄이 비는데,
+      사람 눈으로는 절대 못 잡습니다.</p>
+      <p>→ 구독 등록을 헤더보다 앞으로 옮겼습니다.</p>
     </div>
 
-    <h3>집계 — 구조화 로그라서 가능한 것</h3>
-    <p>범용 logcat 뷰어가 원리상 못 하는 게 이거다. 문자열밖에 없으면 group-by 할 키가
-    없다. 우리는 emitter 단에서 이미 키-값으로 쪼개 놨으니 그냥 세면 된다.</p>
+    <h3>집계 — 형식을 지켜야 가능한 것</h3>
+    <p>일반 logcat 뷰어가 이걸 못 하는 이유는 간단합니다. 문자열밖에 없으면 무엇을 기준으로
+    묶을지가 없습니다. 우리는 로그를 찍을 때 이미 키-값으로 쪼개 놨으니 그냥 세면 됩니다.</p>
     <ul>
-      <li><strong>성공률</strong> — 이벤트 접미사 <code>_OK</code> / <code>_FAIL</code> 로 판정</li>
-      <li><strong>실패 사유 분포</strong> — <code>reason</code>·<code>err</code>·<code>code</code> 필드에서 추출</li>
-      <li><strong>퍼널 이탈</strong> — <code>flowId</code> 로 흐름을 묶고, 없으면 카운트로 근사하되
-      <strong>어느 모드인지 UI 에 표시한다.</strong> 근사값을 정확한 값인 척하지 않는다</li>
+      <li><strong>성공률</strong> — 이벤트 이름 끝이 <code>_OK</code> 인지 <code>_FAIL</code> 인지로 판정</li>
+      <li><strong>실패 사유 분포</strong> — <code>reason</code>·<code>err</code>·<code>code</code> 필드에서 꺼냄</li>
+      <li><strong>단계별 이탈</strong> — <code>flowId</code> 로 같은 흐름끼리 묶고, 없으면 개수로 근사하되
+      <strong>어느 방식인지 화면에 표시합니다.</strong> 근사값을 정확한 값처럼 보여주지 않습니다</li>
     </ul>
   </section>
 
   <!-- ══════════════════════════════════════════ 06 -->
   <section id="s6">
-    <h2><span class="n">06</span>강등 사다리 — 점진 도입의 기술적 기반</h2>
+    <h2><span class="n">06</span>형식에 안 맞는 줄도 버리지 않습니다</h2>
 
     <figure>
       <div class="frame">
@@ -892,20 +901,20 @@ LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class
           <!-- 관문 1 -->
           <path class="d-ln" d="M91 62 V86" marker-end="url(#ah3)" />
           <rect class="d-box" x="16" y="90" width="150" height="40" rx="3" />
-          <text class="d-t-s" x="91" y="107" text-anchor="middle">접두사 매칭</text>
-          <text class="d-t-s" x="91" y="121" text-anchor="middle">3종 순차 시도</text>
+          <text class="d-t-s" x="91" y="107" text-anchor="middle">줄 앞부분 읽기</text>
+          <text class="d-t-s" x="91" y="121" text-anchor="middle">3가지 형식 시도</text>
 
           <path class="d-ln" d="M170 110 H400" marker-end="url(#ah3)" />
           <text class="d-t-s" x="285" y="102" text-anchor="middle" style="fill:var(--lv-v)">실패</text>
           <rect class="d-box" x="404" y="90" width="130" height="40" rx="3" />
           <text class="d-t" x="469" y="108" text-anchor="middle" style="fill:var(--lv-v)">RAW</text>
-          <text class="d-t-s" x="469" y="122" text-anchor="middle">원문 회색 표시</text>
-          <text class="d-t-s" x="548" y="114">구분선, 손상된 줄</text>
+          <text class="d-t-s" x="469" y="122" text-anchor="middle">원문 그대로 표시</text>
+          <text class="d-t-s" x="548" y="114">구분선, 망가진 줄</text>
 
           <!-- 관문 2 -->
           <path class="d-ln" d="M91 134 V158" marker-end="url(#ah3)" />
           <rect class="d-box" x="16" y="162" width="150" height="40" rx="3" />
-          <text class="d-t-s" x="91" y="179" text-anchor="middle">태그 + 본문 매칭</text>
+          <text class="d-t-s" x="91" y="179" text-anchor="middle">태그 + 본문 확인</text>
           <text class="d-t-s" x="91" y="193" text-anchor="middle">PREFIX_DOMAIN / evt=</text>
 
           <path class="d-ln" d="M170 182 H400" marker-end="url(#ah3)" />
@@ -913,48 +922,48 @@ LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class
           <rect class="d-box" x="404" y="162" width="130" height="40" rx="3" />
           <text class="d-t" x="469" y="180" text-anchor="middle" style="fill:var(--lv-w)">UNSTRUCTURED</text>
           <text class="d-t-s" x="469" y="194" text-anchor="middle">태그 + 본문</text>
-          <text class="d-t-s" x="548" y="186">레거시 · 잘림</text>
+          <text class="d-t-s" x="548" y="186">예전 로그 · 잘림</text>
 
           <!-- 성공 -->
           <path class="d-ln-a" d="M91 202 V230" marker-end="url(#ah3)" />
           <text class="d-t-s" x="100" y="220" style="fill:var(--accent)">통과</text>
           <rect class="d-box-a" x="16" y="234" width="150" height="38" rx="3" />
           <text class="d-t-a" x="91" y="258" text-anchor="middle">STRUCTURED</text>
-          <text class="d-t-s" x="182" y="252">도메인 칩 · 이벤트 · 필드 칩</text>
-          <text class="d-t-s" x="182" y="266">· 이슈 트레이 · 집계에 편입</text>
+          <text class="d-t-s" x="182" y="252">도메인 · 이벤트 · 필드 칩</text>
+          <text class="d-t-s" x="182" y="266">· 이슈 목록 · 집계에 포함</text>
         </svg>
       </div>
-      <figcaption><b>세 등급이 있고, 아무것도 버리지 않는다.</b> 라이브러리를 안 쓰는
-      앱에 붙여도 뷰어는 그냥 동작하고, call site 를 하나 옮길 때마다 그 줄만 리치해진다.</figcaption>
+      <figcaption><b>등급이 셋 있고, 어느 경우에도 줄을 버리지 않습니다.</b> 라이브러리를
+      안 쓰는 앱에 붙여도 뷰어는 그냥 동작하고, 호출부를 하나씩 옮길 때마다 그 줄만 자세해집니다.</figcaption>
     </figure>
 
     <p>탭은 <code>domains</code> 와 <code>legacyTagPattern</code> 을 둘 다 가질 수 있어서,
-    이관된 줄과 아직인 줄이 같은 탭에 나란히 보인다 — 이관 진행도가 눈에 보인다.</p>
+    옮긴 줄과 아직인 줄이 같은 탭에 나란히 보입니다 — 얼마나 옮겼는지가 눈에 보입니다.</p>
 
     <div class="bug">
-      <span class="tagline">과장하지 말 것</span>
-      <p><strong>"들어오는 문턱이 없다"와 "call site #1 부터 값이 나온다"는 다른 말이다.</strong>
-      강등 사다리는 문턱을 없애 줄 뿐, 분석 기능을 켜 주지는 않는다.
-      가치 곡선의 무릎은 <strong>한 흐름 전체를 계측했을 때</strong> 온다 — §11.</p>
+      <span class="tagline">과장하지 않기</span>
+      <p><strong>"시작하는 문턱이 없다"와 "호출부 하나만 바꿔도 값이 나온다"는 다른 이야기입니다.</strong>
+      이 3단계 구조는 문턱을 없애 줄 뿐, 분석 기능을 켜 주지는 않습니다.
+      실제로 쓸모가 생기는 건 <strong>흐름 하나를 전부 옮겼을 때</strong>입니다 — §11 참고.</p>
     </div>
   </section>
 
   <!-- ══════════════════════════════════════════ 07 -->
   <section id="s7">
-    <h2><span class="n">07</span>기술 스택</h2>
+    <h2><span class="n">07</span>기술 선택</h2>
 
     <div class="tw">
       <table>
         <thead><tr><th>계층</th><th>선택</th><th>왜</th></tr></thead>
         <tbody>
-          <tr><td class="mono">lib/core</td><td class="mono">순수 자바 8</td><td>안드로이드·서드파티 무의존 → JVM 테스트, 왕복 검증, minSdk 21, 자바 앱 재사용</td></tr>
-          <tr><td class="mono">lib/android</td><td class="mono">android.util.Log</td><td>안드로이드에 닿는 유일한 모듈. 얇게 유지</td></tr>
-          <tr><td class="mono">lib 테스트</td><td class="mono">자체 하네스</td><td>"의존성 0" 을 테스트 코드에서도 지킨다. <code>javac</code> + <code>java</code> 만으로 242 단언</td></tr>
-          <tr><td class="mono">viewer</td><td class="mono">Python 표준 라이브러리</td><td><code>pip install</code> 없이 파일 복사로도 동작. 단일 바이너리 패키징 용이. 사내망 제약 환경에서도 붙음</td></tr>
-          <tr><td class="mono">서버</td><td class="mono">ThreadingHTTPServer</td><td>SSE 에 필요한 건 장수명 연결 + 스레드뿐</td></tr>
-          <tr><td class="mono">전송</td><td class="mono">SSE</td><td>단방향이면 충분. WebSocket 대비 단순하고 재연결이 브라우저에 내장</td></tr>
-          <tr><td class="mono">웹 UI</td><td class="mono">바닐라 JS + CSS</td><td>빌드 스텝 없음. 정적 파일 3개를 그대로 서빙</td></tr>
-          <tr><td class="mono">설정</td><td class="mono">JSON + Schema</td><td>에디터 자동완성이 되고, 잘못된 키를 로딩 시점에 잡는다</td></tr>
+          <tr><td class="mono">lib/core</td><td class="mono">순수 자바 8</td><td>안드로이드나 외부 라이브러리를 안 쓰니 JVM 에서 테스트할 수 있고 뷰어와 대조 검증도 됩니다. minSdk 21, 자바 앱에도 재사용</td></tr>
+          <tr><td class="mono">lib/android</td><td class="mono">android.util.Log</td><td>안드로이드에 닿는 유일한 모듈이라 얇게 유지합니다</td></tr>
+          <tr><td class="mono">lib 테스트</td><td class="mono">직접 만든 테스트</td><td>"외부 라이브러리 0개"를 테스트에서도 지킵니다. <code>javac</code> 와 <code>java</code> 만으로 242개 검사</td></tr>
+          <tr><td class="mono">viewer</td><td class="mono">Python 표준 라이브러리</td><td><code>pip install</code> 없이 파일 복사만으로도 돕니다. 단일 실행 파일로 묶기도 쉽고, 사내망 제약이 있어도 됩니다</td></tr>
+          <tr><td class="mono">서버</td><td class="mono">ThreadingHTTPServer</td><td>SSE 에 필요한 건 오래 유지되는 연결과 스레드뿐입니다</td></tr>
+          <tr><td class="mono">전송</td><td class="mono">SSE</td><td>한 방향이면 충분합니다. WebSocket 보다 단순하고 재연결이 브라우저에 내장돼 있습니다</td></tr>
+          <tr><td class="mono">웹 UI</td><td class="mono">바닐라 JS + CSS</td><td>빌드 단계가 없습니다. 정적 파일 3개를 그대로 내보냅니다</td></tr>
+          <tr><td class="mono">설정</td><td class="mono">JSON + Schema</td><td>에디터 자동완성이 되고, 잘못된 키를 파일 읽는 시점에 잡습니다</td></tr>
         </tbody>
       </table>
     </div>
@@ -964,12 +973,12 @@ LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class
       <table>
         <thead><tr><th>안 쓴 것</th><th>이유</th></tr></thead>
         <tbody>
-          <tr><td class="mono">Electron</td><td>웹 GUI 를 위해 200MB 런타임을 배포할 이유가 없다. 로컬 서버로 같은 걸 얻는다</td></tr>
-          <tr><td class="mono">WebSocket</td><td>양방향이 필요 없다. 브라우저→서버는 평범한 HTTP 로 충분</td></tr>
-          <tr><td class="mono">React / Vue</td><td>빌드 파이프라인이 배포 조건이 된다. 화면 하나짜리 도구엔 과하다</td></tr>
-          <tr><td class="mono">DB</td><td>개발단계 도구다. 세션이 끝나면 버려도 되는 데이터에 스키마 마이그레이션은 과하다</td></tr>
-          <tr><td class="mono">JUnit / pytest</td><td>각 런타임 기본 도구로 충분하고, 의존성 0 원칙과 충돌한다</td></tr>
-          <tr><td class="mono">ELK / 서버 수집</td><td>비목표. 온디바이스·개발단계 초점</td></tr>
+          <tr><td class="mono">Electron</td><td>웹 화면 하나 때문에 200MB 런타임을 배포할 이유가 없습니다. 로컬 서버로 같은 걸 얻습니다</td></tr>
+          <tr><td class="mono">WebSocket</td><td>양방향이 필요 없습니다. 브라우저에서 서버로는 평범한 HTTP 로 충분합니다</td></tr>
+          <tr><td class="mono">React / Vue</td><td>빌드 파이프라인이 배포 조건이 됩니다. 화면 하나짜리 도구에는 과합니다</td></tr>
+          <tr><td class="mono">DB</td><td>개발 중에 쓰는 도구입니다. 세션 끝나면 버려도 되는 데이터에 스키마 관리를 들일 이유가 없습니다</td></tr>
+          <tr><td class="mono">JUnit / pytest</td><td>각 언어의 기본 도구로 충분하고, "외부 의존성 0" 원칙과 충돌합니다</td></tr>
+          <tr><td class="mono">ELK / 서버 수집</td><td>애초에 목표가 아닙니다. 기기에서, 개발 단계에서 쓰는 도구입니다</td></tr>
         </tbody>
       </table>
     </div>
@@ -977,53 +986,53 @@ LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class
 
   <!-- ══════════════════════════════════════════ 08 -->
   <section id="s8">
-    <h2><span class="n">08</span>검증 구조 — 왕복이 핵심이다</h2>
+    <h2><span class="n">08</span>검증 — 양쪽을 서로 대조합니다</h2>
 
-    <p>손으로 쓴 픽스처는 <strong>양쪽에 같은 오해를 심을 수 있다.</strong> 내가 파서를
-    잘못 이해한 채로 픽스처를 쓰면 픽스처 테스트는 통과한다. 두 구현이 서로를 검사해야
-    그 오해가 드러난다.</p>
+    <p>직접 손으로 쓴 테스트 데이터에는 <strong>같은 오해가 양쪽에 들어갈 수 있습니다.</strong>
+    제가 형식을 잘못 이해한 채로 테스트 데이터를 만들면 그 테스트는 통과합니다.
+    두 구현이 서로를 검사해야 그 오해가 드러납니다.</p>
 
-    <div class="log"><span class="cmt">Java Formatter ──생성──▶ 한 줄 ──▶ Python Parser ──▶ 필드 대조
-   (emitter)                            (viewer)</span></div>
+    <div class="log"><span class="cmt">Java 라이브러리 ──만든다──▶ 한 줄 ──▶ Python 파서 ──▶ 필드 비교</span></div>
 
-    <p>기대값은 Formatter 의 출력을 되읽어 만들지 않는다 — 입력으로부터 독립적으로
-    조립한다. 그리고 이 검사가 실제로 파손을 잡는지 <strong>음성 대조</strong>로
-    확인했다: 구분자 파손 · 필드에 공백 주입 · 잘림 표식 제거 → 셋 다 검출됐다.</p>
+    <p>기대값은 라이브러리 출력을 되읽어서 만들지 않고, 입력값에서 따로 계산합니다.
+    그래야 비교에 의미가 있습니다. 이 검사가 실제로 문제를 잡는지도
+    <strong>일부러 망가뜨려서</strong> 확인했습니다: 구분자 깨뜨리기 · 값에 공백 넣기 ·
+    잘림 표시 지우기 → 셋 다 걸렸습니다.</p>
 
     <div class="tw">
       <table>
         <thead><tr><th>검사</th><th class="num">규모</th><th>범위</th></tr></thead>
         <tbody>
-          <tr><td class="mono">make test-viewer</td><td class="num">67 테스트</td><td>파서·집계·설정·서버 API·config 자동생성</td></tr>
-          <tr><td class="mono">make test-lib</td><td class="num">242 단언</td><td>정화·마스킹·절단·포맷·게이팅·싱크 (한글·이모지를 여러 절단 한도에서)</td></tr>
-          <tr><td class="mono">make roundtrip</td><td class="num">26 케이스</td><td><strong>계약 그 자체</strong></td></tr>
-          <tr><td class="mono">make demo</td><td class="num">end-to-end</td><td>진짜 emitter → 파일 → 뷰어</td></tr>
+          <tr><td class="mono">make test-viewer</td><td class="num">67 테스트</td><td>파서, 집계, 설정, 서버 API, 설정 자동생성</td></tr>
+          <tr><td class="mono">make test-lib</td><td class="num">242 단언</td><td>값 정리, 마스킹, 길이 자르기, 형식, 레벨, 출력 (한글·이모지를 여러 길이 제한에서)</td></tr>
+          <tr><td class="mono">make roundtrip</td><td class="num">26 케이스</td><td><strong>형식 자체</strong></td></tr>
+          <tr><td class="mono">make demo</td><td class="num">전 구간</td><td>진짜 라이브러리 → 파일 → 뷰어</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="bug">
       <span class="tagline">테스트가 못 잡은 것</span>
-      <p><code>make demo</code> 가 깨져 있었다. <code>--out</code> 에 날짜 붙은 경로를 주면
-      파일 싱크가 날짜를 <strong>또</strong> 붙여서 뷰어는 없는 파일을 열고 조용히 아무것도
-      스트리밍하지 않았다. 335개 검사가 전부 초록인데도 못 잡았다 —
-      <strong>어떤 테스트도 make 타깃을 실행하지 않았기 때문이다.</strong></p>
-      <p>README 의 헤드라인 명령은 테스트 커버리지 밖에 있기 쉽다.</p>
+      <p><code>make demo</code> 가 깨져 있었습니다. <code>--out</code> 에 날짜가 붙은 경로를 주면
+      파일 저장 쪽이 날짜를 <strong>또</strong> 붙여서, 뷰어는 없는 파일을 열고 조용히 아무것도
+      보여주지 않았습니다. 검사 335개가 전부 통과인데도 못 잡았습니다 —
+      <strong>어떤 테스트도 make 명령을 직접 실행하지 않았기 때문입니다.</strong></p>
+      <p>README 에 크게 적어 둔 명령일수록 테스트 밖에 있기 쉽습니다.</p>
     </div>
   </section>
 
   <!-- ══════════════════════════════════════════ 09 -->
   <section id="s9">
-    <h2><span class="n">09</span>한계 — 알고 감수한 것</h2>
+    <h2><span class="n">09</span>알고 감수한 한계</h2>
     <div class="tw">
       <table>
         <thead><tr><th>한계</th><th>대응 / 왜 감수하는가</th></tr></thead>
         <tbody>
-          <tr><td>영속성 없음. 뷰어를 끄면 버퍼가 사라진다</td><td>장기 보관은 라이브러리의 파일 싱크 담당. 세션 저장은 로드맵</td></tr>
-          <tr><td>집계는 버퍼 범위(기본 2만 줄)</td><td>"어제 대비 성공률"은 못 한다. 서버 수집 파이프라인의 영역 — 명시적 비목표</td></tr>
-          <tr><td><code>flowId</code> 없으면 퍼널은 근사</td><td>상관 ID 는 처음부터 넣어야 한다. UI 가 근사 모드임을 표시</td></tr>
-          <tr><td>단일 기기</td><td>프로세스를 여러 개 띄워 푼다</td></tr>
-          <tr><td>난독화 스택 복원 없음</td><td>로드맵</td></tr>
+          <tr><td>저장하지 않습니다. 뷰어를 끄면 버퍼가 사라집니다</td><td>오래 보관하는 건 라이브러리의 파일 저장이 맡습니다. 세션 저장은 나중 과제</td></tr>
+          <tr><td>분석은 버퍼 범위 안에서만(기본 2만 줄)</td><td>"어제 대비 성공률" 같은 건 못 합니다. 서버 수집 도구가 할 일이고, 애초에 목표가 아닙니다</td></tr>
+          <tr><td><code>flowId</code> 가 없으면 단계별 이탈은 근사값</td><td>흐름을 잇는 ID 는 처음부터 넣어야 합니다. 화면에 근사값임을 표시합니다</td></tr>
+          <tr><td>기기 하나만 봅니다</td><td>여러 대를 보려면 프로그램을 여러 개 띄우면 됩니다</td></tr>
+          <tr><td>난독화된 스택 복원은 없습니다</td><td>나중 과제</td></tr>
         </tbody>
       </table>
     </div>
@@ -1033,12 +1042,13 @@ LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class
       <table>
         <thead><tr><th>항목</th><th>상태</th></tr></thead>
         <tbody>
-          <tr><td class="mono">lib/core</td><td><span class="chip ok">검증</span> javac 21, 242 단언</td></tr>
-          <tr><td class="mono">viewer 전체</td><td><span class="chip ok">검증</span> 67 테스트 + 실제 HTTP 호출</td></tr>
-          <tr><td class="mono">계약 왕복</td><td><span class="chip ok">검증</span> 26 케이스 + 음성 대조</td></tr>
-          <tr><td class="mono">adb · pid · --init</td><td><span class="chip ok">검증</span> 실기기</td></tr>
-          <tr><td class="mono">lib/android · gradle</td><td><span class="chip no">소스만</span> Android SDK 부재로 미컴파일</td></tr>
-          <tr><td class="mono">브라우저 렌더</td><td><span class="chip no">부분</span> JS 문법·DOM 정합·API 모양만 테스트</td></tr>
+          <tr><td class="mono">lib/core</td><td><span class="chip ok">확인</span> javac 21, 242개 검사</td></tr>
+          <tr><td class="mono">뷰어 전체</td><td><span class="chip ok">확인</span> 67개 테스트 + 실제 HTTP 호출</td></tr>
+          <tr><td class="mono">양쪽 대조</td><td><span class="chip ok">확인</span> 26개 케이스 + 일부러 망가뜨려 검증</td></tr>
+          <tr><td class="mono">adb · 앱 추적 · --init</td><td><span class="chip ok">확인</span> 실제 기기</td></tr>
+          <tr><td class="mono">lib/android</td><td><span class="chip ok">확인</span> 컴파일까지 (android-36). 기기 실행은 아직</td>
+          <tr><td class="mono">gradle 빌드</td><td><span class="chip no">미확인</span> gradle 래퍼 없음</td></tr>
+          <tr><td class="mono">브라우저 화면</td><td><span class="chip no">부분</span> JS 문법·DOM 연결·API 응답 모양만 테스트</td></tr>
         </tbody>
       </table>
     </div>
@@ -1046,28 +1056,29 @@ LogLens.e(AppDomain.NET,  <span class="evt">"SOCKET_FAIL"</span>, e, <span class
 
   <!-- ══════════════════════════════════════════ 10 -->
   <section id="s10">
-    <h2><span class="n">10</span>0 → 1 — 이관 안 한 프로젝트에 붙이기</h2>
+    <h2><span class="n">10</span>처음 붙일 때 (0 → 1)</h2>
 
     <ol class="steps">
-      <li><span class="s-n">01</span><span class="s-b"><b>지형부터 본다</b>
+      <li><span class="s-n">01</span><span class="s-b"><b>지금 로그가 어떤지부터 봅니다</b>
         <span><code>loglens --source adb --package com.your.app --init your-app.json</code><br>
-        기기의 최근 logcat 을 표본으로 읽어 대상 앱 pid 가 찍은 태그만 골라 군집화하고
-        탭 초안을 만든다. 도메인이 뭔지 모르는 사람에게 도메인 탭을 적으라고 하면 아무도 안 쓴다.
-        <strong>태그 이름과 빈도만 읽는다</strong> — 메시지 본문은 산출물에 쓰지 않는다(테스트로 강제).</span></span></li>
-      <li><span class="s-n">02</span><span class="s-b"><b>붙여서 본다</b>
-        <span>아직 구조화 0%다. 지금은 "탭이 달린 logcat"이고, <strong>이게 정상이다.</strong>
-        뷰어의 가치는 emission 이 규격을 지킬 때 생긴다.</span></span></li>
-      <li><span class="s-n">03</span><span class="s-b"><b>한 흐름을 통째로 옮긴다</b>
-        <span>call site 하나가 아니다. 옮긴 줄부터 칩·이슈 트레이에는 들어가지만,
-        성공률은 성공·실패가 <strong>쌍으로</strong> 있어야 뜨고 퍼널은 흐름 전체에 <code>flowId</code> 가 필요하다.
-        흩어서 한 줄씩 옮기지 말고 흐름 하나를 끝까지.
-        <strong>옛 로그는 반드시 지운다</strong> — 추가만 하면 잡음과 구조가 공존해 오히려 두 배가 된다.</span></span></li>
-      <li><span class="s-n">04</span><span class="s-b"><b>탭의 domains 를 채운다</b>
-        <span><code>legacyTagPattern</code> 은 그대로 두고 새 도메인을 넣으면, 이관된 줄과
-        아직인 줄이 같은 탭에서 나란히 보인다. 진행도가 눈에 보인다.</span></span></li>
-      <li><span class="s-n">05</span><span class="s-b"><b>퍼널을 정의한다</b>
-        <span>규격이 자리 잡으면 <code>flowId</code> 를 심고 단계를 나열한다.
-        단계별 이탈률이 대시보드에 뜬다.</span></span></li>
+        기기의 최근 logcat 을 읽어서 대상 앱이 찍은 태그만 골라 비슷한 것끼리 묶고
+        탭 초안을 만듭니다. 도메인이 뭔지 모르는 사람한테 도메인 목록을 적으라고 하면 아무도 안 씁니다.
+        <strong>태그 이름과 개수만 읽습니다</strong> — 로그 내용은 결과물에 쓰지 않습니다(테스트로 막아 뒀습니다).</span></span></li>
+      <li><span class="s-n">02</span><span class="s-b"><b>붙여서 봅니다</b>
+        <span>아직 형식에 맞는 로그는 0% 입니다. 지금은 "탭이 달린 logcat" 이고,
+        <strong>그게 정상입니다.</strong> 뷰어의 값어치는 로그가 형식을 지킬 때 생깁니다.</span></span></li>
+      <li><span class="s-n">03</span><span class="s-b"><b>흐름 하나를 통째로 옮깁니다</b>
+        <span>호출부 하나가 아닙니다. 옮긴 줄부터 칩과 이슈 목록에는 들어가지만,
+        성공률은 성공·실패가 <strong>짝으로</strong> 있어야 나오고 단계별 이탈은 흐름 전체에
+        <code>flowId</code> 가 필요합니다. 여기저기 한 줄씩 옮기지 말고 흐름 하나를 끝까지 옮기세요.
+        <strong>옛날 로그는 반드시 지웁니다</strong> — 추가만 하면 지저분한 로그와 정리된 로그가
+        같이 남아서 오히려 두 배가 됩니다.</span></span></li>
+      <li><span class="s-n">04</span><span class="s-b"><b>탭의 domains 를 채웁니다</b>
+        <span><code>legacyTagPattern</code> 은 그대로 두고 새 도메인을 넣으면, 옮긴 줄과
+        아직인 줄이 같은 탭에 나란히 보입니다. 얼마나 옮겼는지가 눈에 보입니다.</span></span></li>
+      <li><span class="s-n">05</span><span class="s-b"><b>단계별 이탈을 설정합니다</b>
+        <span>형식이 자리 잡으면 <code>flowId</code> 를 심고 단계를 나열합니다.
+        화면에 이탈률이 나옵니다.</span></span></li>
     </ol>
 
     <div class="log"><span class="cmt">// before</span>
@@ -1080,35 +1091,35 @@ LogLens.e(AppDomain.CHAT, <span class="evt">"SEND_FAIL"</span>, e, <span class="
 
   <!-- ══════════════════════════════════════════ 11 -->
   <section id="s11">
-    <h2><span class="n">11</span>이 도구가 요구하는 것 — 그리고 그게 왜 리스크인가</h2>
+    <h2><span class="n">11</span>이 도구가 요구하는 것</h2>
 
-    <p class="lead">앞의 열 절은 <em>어떻게 도는가</em>였다. 이 절은
-    <strong>언제 값을 못 내는가</strong>다. 설계의 가장 큰 리스크라서 따로 둔다.</p>
+    <p class="lead">앞의 절들은 <em>어떻게 도는가</em>였습니다. 이 절은
+    <strong>언제 값을 못 내는가</strong>입니다. 설계상 가장 큰 위험 요소라서 따로 뒀습니다.</p>
 
     <div class="tw">
       <table>
-        <thead><tr><th>기능</th><th>필요 조건</th><th style="text-align:center">통합 0줄로?</th></tr></thead>
+        <thead><tr><th>기능</th><th>필요 조건</th><th style="text-align:center">앱을 안 고쳐도?</th></tr></thead>
         <tbody>
           <tr><td>레벨 · 검색 · 정규식 필터</td><td>없음</td><td style="text-align:center"><span class="chip ok">가능</span></td></tr>
-          <tr><td>pid 필터, 도메인 탭 라우팅</td><td>없음</td><td style="text-align:center"><span class="chip ok">가능</span></td></tr>
-          <tr><td>크래시 · ANR · 네이티브 그룹핑</td><td>없음 — 시스템 로그를 파싱</td><td style="text-align:center"><span class="chip ok">가능</span></td></tr>
-          <tr><td>도메인 / 이벤트 빈도</td><td>구조화 레코드</td><td style="text-align:center"><span class="chip no">불가</span></td></tr>
+          <tr><td>앱만 보기, 도메인 탭</td><td>없음</td><td style="text-align:center"><span class="chip ok">가능</span></td></tr>
+          <tr><td>크래시 · ANR · 네이티브 이슈 묶기</td><td>없음 — 시스템 로그를 읽습니다</td><td style="text-align:center"><span class="chip ok">가능</span></td></tr>
+          <tr><td>도메인 / 이벤트 빈도</td><td>형식에 맞는 로그</td><td style="text-align:center"><span class="chip no">불가</span></td></tr>
           <tr><td><strong>성공률</strong></td><td>이벤트 이름을 <code>_OK</code> / <code>_FAIL</code> 로 통일</td><td style="text-align:center"><span class="chip no">불가</span></td></tr>
-          <tr><td><strong>실패 사유 분포</strong></td><td>실패 레코드에 <code>reason=</code> / <code>err=</code></td><td style="text-align:center"><span class="chip no">불가</span></td></tr>
-          <tr><td><strong>퍼널 이탈</strong></td><td>흐름 전체에 <code>flowId=</code> + 단계 정의</td><td style="text-align:center"><span class="chip no">불가</span></td></tr>
+          <tr><td><strong>실패 사유 분포</strong></td><td>실패 로그에 <code>reason=</code> / <code>err=</code></td><td style="text-align:center"><span class="chip no">불가</span></td></tr>
+          <tr><td><strong>단계별 이탈</strong></td><td>흐름 전체에 <code>flowId=</code> + 단계 정의</td><td style="text-align:center"><span class="chip no">불가</span></td></tr>
         </tbody>
       </table>
     </div>
 
-    <p><strong>가능 세 줄만으로는 Android Studio Logcat 을 이길 수 없다.</strong>
-    차별점은 전부 불가 쪽에 있고, 전부 규칙에 의존한다.</p>
+    <p><strong>가능 세 줄만으로는 Android Studio Logcat 을 이길 수 없습니다.</strong>
+    차별점은 전부 불가 쪽에 있고, 전부 형식에 의존합니다.</p>
 
-    <h3>가치 곡선의 무릎</h3>
+    <h3>언제부터 쓸모가 있나</h3>
 
     <figure>
       <div class="frame">
         <svg viewBox="0 0 700 220" role="img"
-             aria-label="가치 곡선. 통합 0줄에서는 칩과 검색과 이슈 그룹핑만 얻고, call site 하나로는 거의 오르지 않으며, 한 흐름 전체를 계측한 지점에서 성공률과 퍼널이 켜지며 급격히 오른다.">
+             aria-label="쓸모가 늘어나는 곡선. 앱을 안 고치면 칩과 검색과 이슈 묶기만 되고, 호출부 하나로는 거의 오르지 않으며, 흐름 하나를 전부 옮긴 지점에서 성공률과 단계별 이탈이 켜지며 크게 오른다.">
           <line class="d-dash" x1="60" y1="24" x2="60" y2="176" />
           <line class="d-dash" x1="60" y1="176" x2="664" y2="176" />
           <text class="d-t-s" x="52" y="30" text-anchor="end">값</text>
@@ -1118,55 +1129,57 @@ LogLens.e(AppDomain.CHAT, <span class="evt">"SEND_FAIL"</span>, e, <span class="
           <polyline class="d-ln-a" points="300,150 400,96 520,64 664,52" />
 
           <circle cx="300" cy="150" r="4" style="fill:var(--accent)" />
-          <text class="d-t-a" x="300" y="138" text-anchor="middle">무릎</text>
+          <text class="d-t-a" x="300" y="138" text-anchor="middle">여기부터</text>
 
-          <text class="d-t-s" x="70"  y="152">칩 · 검색 · 이슈 그룹핑</text>
+          <text class="d-t-s" x="70"  y="152">칩 · 검색 · 이슈 묶기</text>
           <text class="d-t-s" x="410" y="90">성공률 · 실패사유</text>
-          <text class="d-t-s" x="530" y="46">퍼널 · 이탈률</text>
+          <text class="d-t-s" x="530" y="46">단계별 이탈</text>
 
-          <text class="d-t-s" x="60"  y="196" text-anchor="middle">통합 0</text>
-          <text class="d-t-s" x="190" y="196" text-anchor="middle">call site 1개</text>
+          <text class="d-t-s" x="60"  y="196" text-anchor="middle">안 고침</text>
+          <text class="d-t-s" x="190" y="196" text-anchor="middle">호출부 1곳</text>
           <text class="d-t-a" x="310" y="196" text-anchor="middle">흐름 하나 전부</text>
           <text class="d-t-s" x="560" y="196" text-anchor="middle">도메인 전체</text>
         </svg>
       </div>
-      <figcaption><b>1번 call site 부터 선형으로 오르지 않는다.</b> 성공률은 성공·실패가
-      쌍으로, 퍼널은 흐름 전체에 flowId 가 있어야 켜진다.</figcaption>
+      <figcaption><b>호출부 하나부터 곧게 오르지 않습니다.</b> 성공률은 성공·실패가
+      짝으로, 단계별 이탈은 흐름 전체에 flowId 가 있어야 켜집니다.</figcaption>
     </figure>
 
-    <p>기획서 §11 은 "call site #1 부터 가치"라고 적었다. <strong>실제 동작보다
-    낙관적이다.</strong> 한 줄을 옮기면 색칠된 칩 하나를 얻을 뿐이다.
-    실질적 최소 단위는 call site 하나가 아니라 <strong>"한 흐름 전체"</strong>다.
-    이관을 계획한다면 "여기저기 한 줄씩"이 아니라
-    <strong>"흐름 하나를 골라 끝까지"</strong>가 맞다.</p>
+    <p>기획서에는 "호출부 하나만 바꿔도 가치가 있다"고 적었는데, <strong>실제보다
+    낙관적입니다.</strong> 한 줄 바꾸면 색깔 있는 칩 하나가 생기는 정도입니다.
+    실질적인 최소 단위는 호출부 하나가 아니라 <strong>"흐름 하나 전체"</strong>입니다.
+    옮길 계획을 세운다면 "여기저기 한 줄씩"이 아니라
+    <strong>"흐름 하나를 골라 끝까지"</strong>가 맞습니다.</p>
 
-    <h3>그래서 이건 무엇인가</h3>
+    <h3>그래서 이건 무슨 도구인가</h3>
     <div class="note">
-      <span class="tagline">정직한 포지셔닝</span>
-      <p>지저분한 로그를 고쳐 주는 도구가 아니다.
-      <strong>규율을 지키면 그게 보상으로 돌아오게 만드는 도구다.</strong></p>
-      <p>규칙을 어긴 로그는 사라지지 않는다 — 그냥 분석에서 빠진다(§06).
-      벌이 아니라 <strong>비대칭</strong>이고, 그 비대칭이 채택 유인이다.
-      같은 성질이 OpenTelemetry · Sentry · 구조화 로깅 전반에 있다. 넣은 만큼 나온다.</p>
+      <span class="tagline">솔직한 위치</span>
+      <p>지저분한 로그를 알아서 정리해 주는 도구가 아닙니다.
+      <strong>형식을 지키면 그만큼 돌려받게 만드는 도구</strong>입니다.</p>
+      <p>형식을 안 지킨 로그도 사라지지는 않고 그냥 분석에서만 빠집니다(§06).
+      벌을 주는 게 아니라 차이를 만드는 쪽이고, 그 차이가 형식을 지킬 이유가 됩니다.
+      OpenTelemetry 나 Sentry 도 같은 성질입니다. 넣은 만큼 나옵니다.</p>
     </div>
 
-    <h3>의존을 줄이는 두 갈래 <span class="chip no">미구현</span></h3>
-    <p><strong>① 파서 쪽 필드 추출.</strong> 메커니즘은 이미 있다 — 크래시 이슈 그룹핑은
-    통합 0줄인데도 config 정규식으로 원문에서 예외 클래스명을 뽑아낸다. 이 추출을
-    이슈 트레이 말고 <strong>레코드 자체</strong>에 적용하면(레거시 태그 + 패턴 →
-    도메인/이벤트/필드) 앱을 한 줄도 안 고치고 대시보드가 켜진다.</p>
-    <p>취약하다. 로그 문자열이 바뀌면 규칙이 조용히 깨지고, 그건 이 프로젝트가
-    벗어나려던 바로 그 취약함이다. <strong>다리이지 목적지가 아니다</strong> —
-    값을 먼저 보여주고 이관을 설득하는 순서를 만드는 용도다.</p>
-    <p><strong>② codemod.</strong> <code>Log.d(TAG, "…")</code> 를 기계적으로 변환하는 도구.
-    이관 비용이 사람 손이 아니라 스크립트가 되면 채택 논쟁 자체가 사라진다. 근본책이다.</p>
+    <h3>이 의존을 줄이는 방법 두 가지 <span class="chip no">아직 안 만듦</span></h3>
+    <p><strong>① 뷰어 쪽에서 예전 로그를 뜯어내기.</strong> 방법은 이미 코드에 있습니다 —
+    크래시 이슈 묶기는 앱을 안 고쳤는데도 동작하는데, 설정의 정규식으로 원문에서 예외
+    클래스 이름을 뽑아내기 때문입니다. 이 방식을 이슈 목록이 아니라
+    <strong>레코드 자체</strong>에 적용하면(예전 태그 + 패턴 → 도메인/이벤트/필드)
+    앱을 한 줄도 안 고치고 분석 화면이 켜집니다.</p>
+    <p>다만 약합니다. 로그 문자열이 바뀌면 규칙이 조용히 깨지는데, 그게 바로 이 프로젝트가
+    벗어나려던 문제입니다. <strong>중간 단계로만 쓸 만합니다</strong> —
+    값을 먼저 보여주고 그다음에 옮기자고 설득하는 순서를 만드는 용도입니다.</p>
+    <p><strong>② 자동 변환 도구.</strong> <code>Log.d(TAG, "…")</code> 를 기계적으로 바꿔 주는
+    스크립트입니다. 옮기는 비용이 사람 손이 아니라 스크립트가 되면 "해야 하나 말아야 하나"
+    논쟁 자체가 없어집니다. 근본적인 해법입니다.</p>
   </section>
 
   </main>
 
   <footer>
-    <span>LogLens · 구조화 로깅 표준 + 실시간 뷰어</span>
-    <span>emitter 무의존 · viewer 무의존 · 계약 한 줄</span>
+    <span>LogLens · 로그 형식 표준 + 실시간 뷰어</span>
+    <span>라이브러리 · 뷰어 모두 외부 의존 없음 · 공유하는 건 로그 한 줄 형식뿐</span>
   </footer>
 
 </div>
