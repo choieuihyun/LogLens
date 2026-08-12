@@ -139,6 +139,24 @@ loglens --source file --file dump.log --follow     # 저장된 로그 재생
 loglens --source synth                             # 기기 없이 데모
 ```
 
+### config 는 자동으로 만든다
+
+이관을 시작하지 않은 프로젝트에 "도메인 목록을 적으라"고 하면 아무도 안 쓴다.
+그래서 실제 로그에서 초안을 뽑는다.
+
+```bash
+loglens --source adb --package com.your.app --init your-app.json
+```
+
+기기의 최근 logcat 을 표본으로 읽어 **대상 앱 pid 가 찍은 태그만** 골라내고,
+이름으로 군집화해 탭 초안을 만든다 (`Chats` 와 `ChatListFragment` 는 한 탭으로).
+이미 이관된 도메인은 도메인 탭으로, 아직인 것은 `legacyTagPattern` 탭으로 들어간다.
+
+> **태그 이름과 빈도만 읽는다.** 메시지 본문은 집계에도 산출물에도 쓰지 않는다
+> (테스트로 강제).
+
+전체 0→1 절차는 [아키텍처 문서 §9](docs/ARCHITECTURE.md) 참고.
+
 ### 소스 추상화
 
 `adb` / `file` / `synth` 가 한 인터페이스 뒤에 있다. 기기 없이 전부 개발·테스트·데모할 수 있고,
@@ -169,11 +187,13 @@ make roundtrip
 
 | | |
 |---|---|
-| 뷰어 (파서·집계·설정) | 50 테스트 통과 (파서·집계·서버 API) |
+| 뷰어 (파서·집계·설정·자동생성) | 67 테스트 통과 |
 | 라이브러리 core | 242 단언 통과 (javac 21) |
 | 계약 왕복 | 26 케이스 통과 |
+| `--source adb` + `--init` | **실기기로 검증** (연결·pid추적·스트리밍·config 자동생성) |
+| `make demo` (emitter→파일→뷰어) | **실행 검증** |
 | `lib/android`, gradle 빌드 | **소스만.** Android SDK/gradle 부재로 미컴파일 |
-| `--source adb` | **미검증.** 기기 부재. `file`/`synth` 경로로 대체 검증 |
+| 브라우저 렌더 | JS 문법·DOM 정합·API 모양은 테스트. **육안 확인은 아직** |
 
 자세한 내용과 초안에서 바뀐 이유들 → [docs/DECISIONS.md](docs/DECISIONS.md)
 
@@ -182,7 +202,8 @@ make roundtrip
 ## 문서
 
 - [기획서.md](기획서.md) — 원래 설계 초안 (문제 정의, 설계 결정, 실전 교훈)
-- [docs/RECORD_FORMAT.md](docs/RECORD_FORMAT.md) — 계약 전문
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 동작 원리 · 기술 스택 · 뷰어가 기기에 붙는 방식 · 0→1 절차**
+- [docs/RECORD_FORMAT.md](docs/RECORD_FORMAT.md) — 계약 전문 (문법·불변식)
 - [docs/DECISIONS.md](docs/DECISIONS.md) — 만들면서 초안과 달라진 것들
 
 ## 라이선스

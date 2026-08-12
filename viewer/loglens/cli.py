@@ -42,14 +42,19 @@ def _parse_args(argv=None):
     p.add_argument("--no-browser", action="store_true", help="브라우저 자동 실행 안 함")
     p.add_argument("--stdout", action="store_true",
                    help="서버 없이 파싱 결과를 JSONL 로 표준출력 (파이프용)")
+    p.add_argument("--init", metavar="OUT.json",
+                   help="실제 로그를 표본으로 읽어 config.json 초안을 만든다 "
+                        "(태그 이름·빈도만 사용, 메시지 내용은 읽지 않음)")
+    p.add_argument("--init-lines", type=int, default=5000, help="--init 표본 줄 수")
+    p.add_argument("--init-seconds", type=float, default=20.0, help="--init 표본 시간(초)")
     p.add_argument("--version", action="version", version=f"loglens {__version__}")
     return p.parse_args(argv)
 
 
-def _make_source(a, cfg: Config):
+def _make_source(a, cfg: Config, dump: bool = False, tail=None):
     if a.source == "adb":
         return build("adb", serial=a.serial, package=a.package or cfg.package,
-                     adb_path=a.adb, clear_first=a.clear)
+                     adb_path=a.adb, clear_first=a.clear, dump=dump, tail=tail)
     if a.source == "file":
         if not a.file:
             sys.exit("--source file 에는 --file 이 필요합니다")
@@ -57,9 +62,54 @@ def _make_source(a, cfg: Config):
     return build("synth", prefix=cfg.prefix, rate=a.rate)
 
 
+def _run_init(a, cfg: Config) -> int:
+    """실제 로그에서 config.json 초안을 만든다.
+
+    이관 전 프로젝트에 붙이는 첫 단계다. 도메인이 뭔지 모르는 상태에서
+    손으로 config 를 쓰라고 하면 아무도 안 쓴다.
+    """
+    import json
+    from .scaffold import LogLandscape, build_config, report, sample
+
+    # -d: 지금 링버퍼에 있는 것만 읽고 끝낸다. 기다릴 필요가 없다.
+    # 최근 N줄을 본다. 오래된 쪽부터 읽으면 부팅 로그만 표본이 된다.
+    source = _make_source(a, cfg, dump=(a.source == "adb"),
+                          tail=a.init_lines if a.source == "adb" else None)
+    pkg = a.package or cfg.package
+
+    # adb 소스면 대상 앱 pid 를 먼저 푼다 — 시스템 태그를 걸러내는 가장 강한 신호다.
+    app_pid = getattr(source, "_resolve_pid", lambda: None)() if pkg else None
+    if pkg and app_pid is None:
+        print(f"경고: {pkg} 가 실행 중이 아닙니다. 앱을 켜면 훨씬 정확해집니다.",
+              file=sys.stderr)
+
+    land = LogLandscape(prefix=cfg.prefix, app_pid=app_pid)
+    sample(source, Parser(cfg.prefix), land,
+           max_lines=a.init_lines, max_seconds=a.init_seconds)
+
+    if not land.total:
+        print("표본을 하나도 못 읽었습니다. 기기 연결과 소스를 확인하세요.", file=sys.stderr)
+        return 1
+
+    print(report(land), file=sys.stderr)
+    out = build_config(land, package=pkg)
+    with open(a.init, "w", encoding="utf-8") as fh:
+        json.dump(out, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    print(f"\n→ {a.init} 에 초안을 썼습니다. 탭 이름과 도메인은 손으로 다듬으세요.",
+          file=sys.stderr)
+    print(f"   실행:  python3 -m loglens --source {a.source} "
+          f"{'--package ' + pkg + ' ' if pkg else ''}--config {a.init}", file=sys.stderr)
+    return 0
+
+
 def main(argv=None) -> int:
     a = _parse_args(argv)
     cfg = Config.load(a.config)
+
+    if a.init:
+        return _run_init(a, cfg)
+
     source = _make_source(a, cfg)
 
     if a.stdout:

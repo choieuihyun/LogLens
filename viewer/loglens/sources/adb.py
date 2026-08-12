@@ -26,13 +26,20 @@ class AdbSource(LogSource):
 
     def __init__(self, serial: Optional[str] = None, package: Optional[str] = None,
                  adb_path: str = "adb", clear_first: bool = False,
-                 reconnect_delay: float = 2.0):
+                 reconnect_delay: float = 2.0, dump: bool = False,
+                 tail: Optional[int] = None):
         super().__init__()
         self.serial = serial
         self.package = package
         self.adb = adb_path
         self.clear_first = clear_first
         self.reconnect_delay = reconnect_delay
+        # dump=True 면 `logcat -d` — 현재 링버퍼만 뱉고 끝낸다(재연결 없음).
+        # config 자동 생성처럼 "지금 있는 것"만 필요할 때 쓴다.
+        self.dump = dump
+        # tail=N 이면 `-t N` — 버퍼의 **최근** N줄. 이게 없으면 가장 오래된 줄부터
+        # 나와서, 표본을 앞에서 자를 때 부팅 직후 로그만 보게 된다. (실제로 당했다)
+        self.tail = tail
         self.pid: Optional[int] = None
         self._proc: Optional[subprocess.Popen] = None
 
@@ -94,7 +101,7 @@ class AdbSource(LogSource):
             except Exception as e:  # 스트림 예외로 뷰어가 죽으면 안 된다
                 yield marker(f"스트림 오류: {type(e).__name__}: {e}")
 
-            if self.stopped:
+            if self.stopped or self.dump:
                 return
             yield marker("스트림 끊김 — 재연결 시도")
             if self._wait():
@@ -105,6 +112,10 @@ class AdbSource(LogSource):
             subprocess.run(self._base() + ["logcat", "-c"],
                            capture_output=True, timeout=10)
         cmd = self._base() + ["logcat", "-v", LOGCAT_FORMAT]
+        if self.tail:
+            cmd += ["-t", str(self.tail)]     # -t 는 -d 를 함의한다
+        elif self.dump:
+            cmd += ["-d"]
         self._proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
@@ -136,4 +147,4 @@ class AdbSource(LogSource):
     def describe(self) -> dict:
         return {"kind": self.name, "serial": self.serial,
                 "package": self.package, "pid": self.pid,
-                "format": LOGCAT_FORMAT}
+                "format": LOGCAT_FORMAT, "dump": self.dump}
