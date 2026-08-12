@@ -29,7 +29,10 @@ build: ## 자바 소스 컴파일 (core + 샘플 + 왕복도구)
 	@mkdir -p $(CLASSES)
 	@$(JAVAC) -encoding UTF-8 -d $(CLASSES) $(CORE_SRC) $(DEMO_SRC)
 
-test: test-viewer test-lib roundtrip ## 전부 검증
+# Android SDK 가 있으면 android 모듈도 컴파일 검사한다. 없으면 건너뛴다.
+ANDROID_JAR := $(lastword $(sort $(wildcard $(HOME)/Library/Android/sdk/platforms/android-*/android.jar)))
+
+test: test-viewer test-lib test-android roundtrip ## 전부 검증
 	@echo ""
 	@echo "모두 통과."
 
@@ -40,6 +43,18 @@ test-viewer: ## 뷰어 파서/집계 테스트 (Python, 의존성 없음)
 test-lib: build ## 라이브러리 core 테스트 (JUnit 없이 순수 자바)
 	@echo "── 라이브러리 ──"
 	@$(JAVA) -cp $(CLASSES) io.loglens.core.CoreTests
+
+test-android: build ## lib/android 컴파일 검사 (Android SDK 있을 때만)
+	@echo "── 안드로이드 모듈 ──"
+ifeq ($(ANDROID_JAR),)
+	@echo "  건너뜀: Android SDK 를 못 찾음 (\$$ANDROID_JAR 로 android.jar 경로를 줘도 된다)"
+else
+	@mkdir -p build/android
+	@$(JAVAC) -encoding UTF-8 -source 8 -target 8 -nowarn -Xlint:-options \
+		-bootclasspath "$(ANDROID_JAR)" -cp $(CLASSES) -d build/android \
+		$(shell find lib/android/src -name '*.java')
+	@echo "  컴파일 OK  ($(notdir $(patsubst %/android.jar,%,$(ANDROID_JAR))), source/target 8)"
+endif
 
 roundtrip: build ## 계약 왕복 검증: Java emitter → Python parser
 	@echo "── 왕복 ──"

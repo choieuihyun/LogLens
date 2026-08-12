@@ -23,8 +23,15 @@ public final class LineFormat {
     public static final String TS_PATTERN = "yyyy-MM-dd HH:mm:ss.SSS";
 
     // SimpleDateFormat 은 스레드 세이프하지 않다.
-    private static final ThreadLocal<SimpleDateFormat> FMT =
-            ThreadLocal.withInitial(() -> new SimpleDateFormat(TS_PATTERN, Locale.US));
+    //
+    // ThreadLocal.withInitial() 을 쓰지 않는 이유: 자바 8 API 지만 안드로이드에서는
+    // **API 26 부터** 존재한다. minSdk 21 을 선언해 놓고 그걸 쓰면 API 21~25 기기에서
+    // 클래스 로딩 시점에 NoSuchMethodError 로 죽는다. 익명 서브클래스는 어디서나 된다.
+    private static final ThreadLocal<SimpleDateFormat> FMT = new ThreadLocal<SimpleDateFormat>() {
+        @Override protected SimpleDateFormat initialValue() {
+            return new SimpleDateFormat(TS_PATTERN, Locale.US);
+        }
+    };
 
     private LineFormat() {}
 

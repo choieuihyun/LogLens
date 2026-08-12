@@ -196,7 +196,8 @@ make roundtrip
 | 계약 왕복 | 26 케이스 통과 |
 | `--source adb` + `--init` | **실기기로 검증** (연결·pid추적·스트리밍·config 자동생성) |
 | `make demo` (emitter→파일→뷰어) | **실행 검증** |
-| `lib/android`, gradle 빌드 | **소스만.** Android SDK/gradle 부재로 미컴파일 |
+| `lib/android` | **컴파일 검증** (android-36, source/target 8). 기기 실행은 아직 |
+| gradle 빌드 | **미검증.** gradle 래퍼 부재 — 지금은 소스 복사/로컬 모듈로 붙인다 |
 | 브라우저 렌더 | JS 문법·DOM 정합·API 모양은 테스트. **육안 확인은 아직** |
 
 자세한 내용과 초안에서 바뀐 이유들 → [docs/DECISIONS.md](docs/DECISIONS.md)

@@ -25,8 +25,12 @@ public final class FileSink implements Sink {
     private String currentDay;
     private BufferedWriter writer;
 
-    private static final ThreadLocal<SimpleDateFormat> DAY =
-            ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd", Locale.US));
+    // withInitial() 은 안드로이드 API 26+ 다 (LineFormat 의 주석 참고). minSdk 21 을 지킨다.
+    private static final ThreadLocal<SimpleDateFormat> DAY = new ThreadLocal<SimpleDateFormat>() {
+        @Override protected SimpleDateFormat initialValue() {
+            return new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        }
+    };
 
     public FileSink(File dir) { this(dir, "app", 7); }
 

@@ -164,6 +164,22 @@ pid 추적은 만들어 놓고 **어디에도 적용하지 않은 채** README �
 표본을 앞에서 N줄 자르니 부팅 직후 로그만 보게 됐고, 앱 태그가 하나도 안 잡혔다.
 → `-t N` (최근 N줄)으로 교체.
 
+## D19. minSdk 21 을 선언했으면 21에서 도는지 확인해야 한다
+
+`ThreadLocal.withInitial()` 을 쓰고 있었다. 자바 8 API 라 `source/target 1.8` 이면
+될 것 같지만, **안드로이드에서는 API 26 부터** 존재한다. minSdk 21 을 선언해 놓고
+그걸 쓰면 API 21~25 기기에서 클래스 로딩 시점에 `NoSuchMethodError` 로 죽는다.
+파일 싱크를 켠 앱만, 구형 기기에서만 죽는다 — 최악의 재현 조건이다.
+
+→ 익명 서브클래스(`new ThreadLocal<T>(){ initialValue() }`)로 교체. 어디서나 된다.
+
+교훈: "자바 8 문법"과 "안드로이드가 제공하는 자바 8 API"는 다른 이야기다.
+문법(람다·default 메서드)은 D8 이 디슈가링해 주지만, **런타임 API 는 안 해준다**
+(core library desugaring 을 따로 켜지 않는 한).
+
+이 김에 `make test-android` 를 추가했다 — Android SDK 의 `android.jar` 를 찾아
+`lib/android` 를 실제로 컴파일한다. 없으면 건너뛴다.
+
 ---
 
 ## 검증되지 않은 것 (정직하게)
@@ -171,7 +187,7 @@ pid 추적은 만들어 놓고 **어디에도 적용하지 않은 채** README �
 | 항목 | 상태 |
 |---|---|
 | `lib/core` | **컴파일·테스트 완료** (javac 21, 242 단언) |
-| `lib/android` | **소스만.** Android SDK/AGP 부재로 미컴파일 |
+| `lib/android` | **컴파일 검증** (`make test-android`, android-36). 기기 실행은 아직 |
 | `lib/*/build.gradle.kts` | **미검증.** gradle 부재 |
 | `--source adb` | **미검증.** adb·기기 부재. `file`/`synth` 경로로 대체 검증 |
 | 뷰어 파서/집계/서버 | **테스트 완료** (67 테스트) |
