@@ -1,0 +1,64 @@
+{
+  "$schema": "../config.schema.json",
+  "prefix": "APP",
+  "package": "io.loglens.sample",
+  "bufferSize": 20000,
+
+  "tabs": [
+    {
+      "id": "auth",
+      "label": "인증",
+      "domains": ["AUTH"],
+      "legacyTagPattern": "(?i)login|auth|session"
+    },
+    { "id": "chat", "label": "채팅", "domains": ["CHAT"], "legacyTagPattern": "(?i)chat|room|msg" },
+    { "id": "net", "label": "네트워크", "domains": ["NET", "API2"], "legacyTagPattern": "(?i)okhttp|retrofit" },
+    { "id": "file", "label": "파일", "domains": ["FILE_XFER"] }
+  ],
+
+  "issueRules": [
+    {
+      "id": "crash",
+      "label": "크래시",
+      "severity": "fatal",
+      "when": { "tag": "^AndroidRuntime$", "raw": "[\\w.$]+(?:Exception|Error)\\b" },
+      "group": { "regex": "([\\w.$]+(?:Exception|Error))\\b", "fallback": "UnknownCrash" }
+    },
+    {
+      "id": "anr",
+      "label": "ANR",
+      "severity": "fatal",
+      "when": { "raw": "\\bANR in\\b" },
+      "group": { "regex": "ANR in ([^\\s(]+)", "fallback": "ANR" }
+    },
+    {
+      "id": "native",
+      "label": "네이티브 크래시",
+      "severity": "fatal",
+      "when": { "tag": "^(DEBUG|libc)$", "raw": "signal \\d+|Fatal signal" },
+      "group": { "regex": "(signal \\d+[^,]*)", "fallback": "native" }
+    },
+    {
+      "id": "structured_error",
+      "label": "구조화 에러",
+      "severity": "error",
+      "when": { "kind": "^structured$", "level": "^E$" },
+      "group": { "template": "{domain}/{event}" }
+    }
+  ],
+
+  "funnels": [
+    {
+      "id": "login",
+      "label": "로그인",
+      "domain": "AUTH",
+      "steps": ["LOGIN_START", "CREDENTIAL_CHECK", "TOKEN_ISSUE", "PROFILE_FETCH", "LOGIN_OK"]
+    }
+  ],
+
+  "outcome": {
+    "success": ["_OK", "_SUCCESS", "_DONE"],
+    "failure": ["_FAIL", "_ERROR", "_TIMEOUT", "_DENIED"],
+    "reasonFields": ["reason", "err", "code"]
+  }
+}

@@ -1,0 +1,19 @@
+--------- beginning of main
+08-12 11:23:45.678  4321  4321 I APP_AUTH: evt=LOGIN_OK uid=123 | 로그인 성공
+08-12 11:23:45.690  4321  4390 E APP_NET: evt=SOCKET_FAIL host=10.0.0.1 err=ConnectException:timeout
+08-12 11:23:45.701  4321  4321 D APP_CHAT: evt=ROOM_ENTER
+08-12 11:23:45.712  4321  4321 I APP_CHAT: evt=MSG_SEND | 그냥 메시지만 있는 경우
+08-12 11:23:45.720  4321  4390 W APP_AUTH: evt=TOKEN_REFRESH token=*** uid=123
+08-12 11:23:45.733  4321  4321 I APP_FILE_XFER: evt=UPLOAD_DONE size=1048576 name=-
+08-12 11:23:45.744  4321  4321 I APP_API2: evt=CALL_OK code=200
+08-12 11:23:45.755  4321  4321 V APP_NET: evt=TRACE payload=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...[cut]
+08-12 11:23:45.766  4321  4321 I APP_AUTH: evt=LOGIN_FAIL reason=WRONG_PW uid=123 | 비밀번호 불일치\n재시도 안내함
+08-12 11:23:45.777  4321  4321 D LegacyTag: @@@@@ here i am debugging stuff
+08-12 11:23:45.788  4321  4321 I SomeOther: evt=NOT_OURS x=1
+08-12 11:23:45.799  4321  4321 E APP_CHAT: evt=SEND_FAIL err=IllegalStateException | 소켓 닫힘
+08-12 11:23:45.810  4321  4321 E AndroidRuntime: FATAL EXCEPTION: main
+08-12 11:23:45.810  4321  4321 E AndroidRuntime: Process: io.loglens.sample, PID: 4321
+08-12 11:23:45.810  4321  4321 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke virtual method
+08-12 11:23:45.810  4321  4321 E AndroidRuntime: 	at io.loglens.sample.MainActivity.onCreate(MainActivity.java:42)
+08-12 11:23:45.900  1200  1200 E ActivityManager: ANR in io.loglens.sample (io.loglens.sample/.MainActivity)
+08-12 11:23:46.010  4321  4321 I APP_AUTH: evt=LOGOUT uid=123 | 세션 종료

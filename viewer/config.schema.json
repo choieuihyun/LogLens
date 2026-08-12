@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/choieuihyun/LogLens/viewer/config.schema.json",
+  "title": "LogLens viewer config",
+  "description": "프로젝트별 도메인 탭 / 이슈 규칙 / 프리픽스. 뷰어를 포크하지 않고 갈아끼우기 위한 파일.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+
+    "prefix": {
+      "type": "string",
+      "default": "APP",
+      "description": "logcat 태그 접두사. 태그는 <prefix>_<DOMAIN> 형태여야 한다.",
+      "pattern": "^[A-Za-z][A-Za-z0-9]*$"
+    },
+    "package": {
+      "type": "string",
+      "description": "대상 앱 패키지. adb 소스에서 pid 자동추적에 쓴다."
+    },
+    "bufferSize": {
+      "type": "integer", "minimum": 100, "maximum": 1000000, "default": 20000,
+      "description": "서버 링버퍼 크기(줄). 대시보드 집계 범위와 같다."
+    },
+
+    "tabs": {
+      "type": "array",
+      "description": "도메인 탭. 원클릭 필터.",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "domains": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Z0-9_]+$" },
+            "description": "이 탭이 모을 도메인들 (태그의 prefix_ 뒷부분)."
+          },
+          "legacyTagPattern": {
+            "type": "string",
+            "description": "아직 이관 안 된 레거시 태그도 같은 탭에 끌어오기 위한 정규식. 점진 도입용."
+          }
+        }
+      }
+    },
+
+    "issueRules": {
+      "type": "array",
+      "description": "이슈 트레이 규칙. 무엇을 이슈로 볼지 + 어떻게 그룹핑할지.",
+      "items": {
+        "type": "object",
+        "required": ["id", "when"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "severity": { "enum": ["fatal", "error", "warn", "info"], "default": "error" },
+          "when": {
+            "type": "object",
+            "description": "레코드 속성 → 정규식. 전부 만족해야 매치(AND).",
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "type": "string" },
+              "level": { "type": "string" },
+              "tag": { "type": "string" },
+              "domain": { "type": "string" },
+              "event": { "type": "string" },
+              "msg": { "type": "string" },
+              "raw": { "type": "string" }
+            }
+          },
+          "group": {
+            "type": "object",
+            "description": "그룹 키 생성. regex(raw 첫 캡처그룹) 또는 template({domain}/{event}, {f_필드명}).",
+            "additionalProperties": false,
+            "properties": {
+              "regex": { "type": "string" },
+              "fallback": { "type": "string" },
+              "template": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "funnels": {
+      "type": "array",
+      "description": "세션 퍼널. flowId 필드가 있으면 흐름 단위, 없으면 단순 카운트로 근사.",
+      "items": {
+        "type": "object",
+        "required": ["id", "domain", "steps"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "domain": { "type": "string", "pattern": "^[A-Z0-9_]+$" },
+          "steps": { "type": "array", "items": { "type": "string" }, "minItems": 2 }
+        }
+      }
+    },
+
+    "outcome": {
+      "type": "object",
+      "description": "이벤트 이름 접미사로 성공/실패 판정. 이름 거버넌스(기획서 §9-4)의 보상.",
+      "additionalProperties": false,
+      "properties": {
+        "success": { "type": "array", "items": { "type": "string" } },
+        "failure": { "type": "array", "items": { "type": "string" } },
+        "reasonFields": {
+          "type": "array", "items": { "type": "string" },
+          "description": "실패 사유를 읽을 필드 우선순위."
+        }
+      }
+    }
+  }
+}

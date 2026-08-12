@@ -1,0 +1,4 @@
+I/APP_AUTH( 4321): evt=LOGIN_OK uid=123 | 로그인 성공
+E/APP_NET ( 4321): evt=SOCKET_FAIL host=10.0.0.1 err=ConnectException:timeout
+D/APP_CHAT( 4321): evt=ROOM_ENTER
+D/LegacyTag( 4321): @@@@ 자유형식 레거시 로그

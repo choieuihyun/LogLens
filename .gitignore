@@ -1,0 +1,28 @@
+# 빌드 산출물
+build/
+out/
+*.class
+*.jar
+*.aar
+
+# gradle
+.gradle/
+local.properties
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.venv/
+venv/
+
+# 로그 / 세션 덤프
+*.log
+!viewer/tests/fixtures/*.log
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store

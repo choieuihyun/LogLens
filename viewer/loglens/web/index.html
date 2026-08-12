@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LogLens</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">Log<span>Lens</span></div>
+  <div class="status"><span id="dot" class="dot"></span><span id="status">연결 중…</span></div>
+  <div class="src" id="src"></div>
+  <div class="spacer"></div>
+  <div class="counts"><b id="cShown">0</b> / <span id="cTotal">0</span> 줄</div>
+  <button id="btnDash" class="btn">분석</button>
+  <button id="btnPause" class="btn">일시정지</button>
+  <button id="btnClear" class="btn">비우기</button>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<div class="toolbar">
+  <div class="levels" id="levels"></div>
+  <input id="q" class="q" type="search" placeholder="검색 (evt / 필드 / 메시지 / 태그)" autocomplete="off">
+  <label class="chk"><input type="checkbox" id="rx"> 정규식</label>
+  <label class="chk"><input type="checkbox" id="onlyStruct"> 구조화만</label>
+  <label class="chk"><input type="checkbox" id="autoscroll" checked> 자동스크롤</label>
+</div>
+
+<main>
+  <section class="logs" id="logs"></section>
+  <aside class="tray">
+    <h2>이슈 트레이 <span class="hint">자동 그룹핑</span></h2>
+    <div id="tray"><p class="empty">아직 이슈 없음</p></div>
+  </aside>
+</main>
+
+<section class="dash" id="dash" hidden>
+  <div class="dash-inner">
+    <div class="dash-head">
+      <h2>분석 대시보드</h2>
+      <span class="hint">버퍼 전체 집계 · 구조화 로그라서 가능한 것</span>
+      <button id="dashClose" class="btn">닫기</button>
+    </div>
+    <div id="dashBody" class="dash-body"></div>
+  </div>
+</section>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

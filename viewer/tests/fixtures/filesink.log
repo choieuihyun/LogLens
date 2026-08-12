@@ -1,0 +1,4 @@
+2026-08-12 11:23:45.678 I/APP_AUTH: evt=LOGIN_OK uid=123 | 로그인 성공
+2026-08-12 11:23:45.690 E/APP_NET: evt=SOCKET_FAIL host=10.0.0.1 err=ConnectException:timeout
+2026-08-12 11:23:45.701 D/APP_CHAT: evt=ROOM_ENTER
+2026-08-12 11:23:45.712 W/APP_AUTH: evt=TOKEN_REFRESH token=*** uid=123 | 재발급
