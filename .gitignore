@@ -1,6 +1,7 @@
 # 빌드 산출물
 build/
 out/
+bin/          # Eclipse/VSCode Java 확장이 소스를 복사해 두는 곳
 *.class
 *.jar
 *.aar

@@ -3,6 +3,7 @@ package io.loglens.core
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class FormatterTest {
@@ -79,5 +80,32 @@ class FormatterTest {
         assertTrue(Truncator.isTruncated(long))
         assertTrue(Truncator.utf8Length(long) <= Truncator.DEFAULT_MAX_BYTES)
         assertFalse(long.contains("\n"))
+    }
+
+    // ── 필드 값 흔들림 방지 ────────────────────────────────────────────────
+    // 필드 값이 자유 문자열이면 OPEN / open / Open 이 서로 다른 그룹이 되어
+    // 집계가 조용히 쪼개진다. enum 을 넘기면 컴파일 시점에 막힌다.
+
+    private enum class ChatKind { NORMAL, OPEN, ANON }
+
+    @Test
+    fun `enum 을 값으로 넘기면 이름 그대로 찍힌다`() =
+        assertEquals(
+            "evt=MSG_SEND_OK kind=OPEN",
+            f.body("MSG_SEND_OK", arrayOf("kind", ChatKind.OPEN)),
+        )
+
+    @Test
+    fun `enum 은 같은 상수면 항상 같은 문자열이 된다`() {
+        val a = f.body("X", arrayOf("kind", ChatKind.OPEN))
+        val b = f.body("X", arrayOf("kind", ChatKind.valueOf("OPEN")))
+        assertEquals(a, b)
+    }
+
+    @Test
+    fun `자유 문자열은 대소문자가 다르면 다른 값이 된다 - enum 을 써야 하는 이유`() {
+        val upper = f.body("X", arrayOf("kind", "OPEN"))
+        val lower = f.body("X", arrayOf("kind", "open"))
+        assertNotEquals(upper, lower)
     }
 }
