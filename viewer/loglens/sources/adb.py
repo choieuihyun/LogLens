@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import threading
 import time
 from typing import Iterator, List, Optional
 
@@ -27,13 +28,14 @@ class AdbSource(LogSource):
     def __init__(self, serial: Optional[str] = None, package: Optional[str] = None,
                  adb_path: str = "adb", clear_first: bool = False,
                  reconnect_delay: float = 2.0, dump: bool = False,
-                 tail: Optional[int] = None):
+                 tail: Optional[int] = None, pid_refresh: float = 5.0):
         super().__init__()
         self.serial = serial
         self.package = package
         self.adb = adb_path
         self.clear_first = clear_first
         self.reconnect_delay = reconnect_delay
+        self.pid_refresh = pid_refresh
         # dump=True 면 `logcat -d` — 현재 링버퍼만 뱉고 끝낸다(재연결 없음).
         # config 자동 생성처럼 "지금 있는 것"만 필요할 때 쓴다.
         self.dump = dump
@@ -41,7 +43,12 @@ class AdbSource(LogSource):
         # 나와서, 표본을 앞에서 자를 때 부팅 직후 로그만 보게 된다. (실제로 당했다)
         self.tail = tail
         self.pid: Optional[int] = None
+        # 앱이 재시작되면 pid 가 바뀌는데, 재시작 전 로그도 여전히 그 앱의 로그다.
+        # 그래서 현재 pid 하나가 아니라 **이번 세션에서 본 pid 전부**를 들고 있는다.
+        # 안 그러면 앱을 재실행하는 순간 이전 로그가 화면에서 통째로 사라진다.
+        self.pids: set = set()
         self._proc: Optional[subprocess.Popen] = None
+        self._watchdog: Optional[threading.Thread] = None
 
     # -- adb 호출 조립 --------------------------------------------------------
     def _base(self) -> List[str]:
@@ -59,7 +66,10 @@ class AdbSource(LogSource):
                 self._base() + ["shell", "pidof", self.package],
                 capture_output=True, text=True, timeout=5,
             ).stdout.strip()
-            return int(out.split()[0]) if out.split() else None
+            pid = int(out.split()[0]) if out.split() else None
+            if pid:
+                self.pids.add(pid)
+            return pid
         except Exception:
             return None
 
@@ -107,6 +117,26 @@ class AdbSource(LogSource):
             if self._wait():
                 return
 
+    def _start_watchdog(self) -> None:
+        """스트리밍 도중에도 pid 를 다시 푼다.
+
+        앱이 재시작돼도 logcat 스트림은 안 끊기기 때문에, 재연결 시점에만
+        pid 를 확인하면 죽은 pid 를 계속 붙잡고 있게 된다. (실제로 당했다)
+        """
+        if not self.package:
+            return
+
+        def loop():
+            while not self.stopped and self._proc is not None:
+                if self._stop.wait(self.pid_refresh):
+                    return
+                new = self._resolve_pid()
+                if new and new != self.pid:
+                    self.pid = new
+
+        self._watchdog = threading.Thread(target=loop, name="loglens-pid", daemon=True)
+        self._watchdog.start()
+
     def _stream_once(self) -> Iterator[str]:
         if self.clear_first:
             subprocess.run(self._base() + ["logcat", "-c"],
@@ -120,6 +150,7 @@ class AdbSource(LogSource):
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
         )
+        self._start_watchdog()
         assert self._proc.stdout is not None
         for line in self._proc.stdout:
             if self.stopped:
@@ -147,4 +178,5 @@ class AdbSource(LogSource):
     def describe(self) -> dict:
         return {"kind": self.name, "serial": self.serial,
                 "package": self.package, "pid": self.pid,
+                "pids": sorted(self.pids),
                 "format": LOGCAT_FORMAT, "dump": self.dump}
