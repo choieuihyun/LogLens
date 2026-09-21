@@ -132,7 +132,7 @@ class SyntheticSource(LogSource):
         sub = len(ORG_TREE.get(node, []))
         return [self._evt(
             "D", "ORG", "NODE_FETCH_OK",
-            f"node={node} parent={parent} title={title} "
+            f"node={node} parent={parent} title={title} depth={len(node) - 1} "
             f"children={sub} items={self.rnd.randint(0, 9)}",
             f"계층 호출: {title} 하위 {sub}개",
         )]
@@ -140,7 +140,7 @@ class SyntheticSource(LogSource):
     def _org_root(self) -> List[str]:
         node, title = ORG_TREE[None][0]
         return [self._evt("D", "ORG", "NODE_FETCH_OK",
-                          f"node={node} parent=- title={title} "
+                          f"node={node} parent=- title={title} depth=0 "
                           f"children={len(ORG_TREE.get(node, []))} items=0",
                           f"계층 호출: {title}")]
 

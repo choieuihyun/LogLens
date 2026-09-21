@@ -135,7 +135,9 @@
       "metrics": [
         "children",
         "items"
-      ]
+      ],
+      "childCount": "children",
+      "depthField": "depth"
     }
   ]
 }

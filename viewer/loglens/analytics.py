@@ -167,10 +167,14 @@ def build_tree(records: List[Record], cfg_tree) -> dict:
         if not cfg_tree.matches(r):
             continue
         nid = r.fields.get(cfg_tree.node)
-        if not nid or nid == "-":
+        if not nid:
             continue
+        # 최상위 노드는 식별자가 비어 있을 수 있다("-"). 버리면 "자식이 몇 개여야 하는지"
+        # 같은 정보가 통째로 날아간다. 예약 id 를 주고 살린다.
+        if nid == "-":
+            nid = ROOT_ID
         pid = r.fields.get(cfg_tree.parent)
-        if pid == "-":
+        if pid == "-" or pid == nid:
             pid = None
 
         n = nodes.get(nid)
@@ -182,6 +186,8 @@ def build_tree(records: List[Record], cfg_tree) -> dict:
                 "metrics": {},
                 "hits": 0,
                 "lastTs": None,
+                "expected": None,     # 앱이 알려준 자식 수
+                "loggedDepth": None,  # 앱이 적어 준 깊이 (검증용)
                 "children": [],
             }
             nodes[nid] = n
@@ -196,6 +202,16 @@ def build_tree(records: List[Record], cfg_tree) -> dict:
         for m in cfg_tree.metrics:
             if m in r.fields:
                 n["metrics"][m] = r.fields[m]
+        if cfg_tree.depth_field and cfg_tree.depth_field in r.fields:
+            try:
+                n["loggedDepth"] = int(r.fields[cfg_tree.depth_field])
+            except ValueError:
+                pass
+        if cfg_tree.child_count and cfg_tree.child_count in r.fields:
+            try:
+                n["expected"] = int(r.fields[cfg_tree.child_count])
+            except ValueError:
+                pass
 
     # 부모-자식 잇기. 부모를 못 본 노드는 뿌리로 올린다.
     roots: List[dict] = []
@@ -211,7 +227,29 @@ def build_tree(records: List[Record], cfg_tree) -> dict:
                 orphans += 1
             roots.append(n)
 
+    # 최상위 노드를 봤다면, 부모 없는 나머지는 전부 그 아래로 모은다.
+    # `parent=-` 는 "부모 없음"이 아니라 "최상위의 자식"이라는 뜻이기 때문이다.
+    root_node = nodes.get(ROOT_ID)
+    if root_node is not None and len(roots) > 1:
+        adopted = [n for n in roots if n is not root_node and not n.get("orphan")]
+        root_node["children"] = adopted + root_node["children"]
+        roots = [root_node] + [n for n in roots if n is not root_node and n.get("orphan")]
+
     _assign_depth(roots)
+
+    # depth 는 parent 와 중복 정보다. 트리는 parent 로만 세우고, depth 는 **검증**에 쓴다.
+    # 어긋나면 parent 필드가 잘못 들어오고 있다는 신호다 (실제로 한 번 겪었다).
+    depth_mismatch = 0
+    if cfg_tree.depth_field:
+        for n in nodes.values():
+            if n.get("loggedDepth") is not None and n["loggedDepth"] != n.get("depth"):
+                n["depthMismatch"] = True
+                depth_mismatch += 1
+
+    # 앱이 "자식 N개" 라고 했는데 그중 몇 개만 봤는지. 어디를 더 펼쳐야 하는지 알려준다.
+    for n in nodes.values():
+        n["missing"] = (max(0, n["expected"] - len(n["children"]))
+                        if n["expected"] is not None else None)
     return {
         "id": cfg_tree.id,
         "label": cfg_tree.label,
@@ -220,9 +258,12 @@ def build_tree(records: List[Record], cfg_tree) -> dict:
         "rootCount": len(roots),
         "orphanCount": orphans,
         "maxDepth": max((_max_depth(r) for r in roots), default=0),
+        "missingTotal": sum(n["missing"] or 0 for n in nodes.values()),
+        "depthMismatch": depth_mismatch,
     }
 
 
+ROOT_ID = "(root)"      # 식별자가 비어 있는 최상위 노드에 주는 예약 id
 _DEPTH_MAX = 64     # 서버 데이터가 서로를 가리켜도 멈추게 한다
 
 

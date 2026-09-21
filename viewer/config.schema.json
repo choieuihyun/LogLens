@@ -236,6 +236,14 @@
               "type": "string"
             },
             "description": "노드 옆에 같이 표시할 숫자 필드"
+          },
+          "childCount": {
+            "type": "string",
+            "description": "자식이 몇 개여야 하는지 앱이 알려주는 필드(예: subDept). 실제로 본 자식 수와 비교해 '아직 안 펼친 개수'를 보여준다."
+          },
+          "depthField": {
+            "type": "string",
+            "description": "앱이 적어 준 깊이 필드(예: depth). 트리는 parent 로만 세우고 이건 검증에만 쓴다. 어긋나면 parent 가 잘못 들어오고 있다는 신호."
           }
         }
       }

@@ -14,7 +14,6 @@
   <div class="src" id="src"></div>
   <div class="spacer"></div>
   <div class="counts"><b id="cShown">0</b> / <span id="cTotal">0</span> 줄</div>
-  <button id="btnTree" class="btn" hidden>계층</button>
   <button id="btnDash" class="btn">분석</button>
   <button id="btnPause" class="btn">일시정지</button>
   <button id="btnClear" class="btn">비우기</button>
@@ -29,26 +28,19 @@
   <label class="chk"><input type="checkbox" id="onlyStruct"> 구조화만</label>
   <label class="chk" id="pidWrap" hidden><input type="checkbox" id="onlyPid"> <span id="pidLabel">이 앱만</span></label>
   <label class="chk"><input type="checkbox" id="autoscroll" checked> 자동스크롤</label>
+  <div class="viewsw" id="viewSw" hidden>
+    <button class="vbtn on" data-v="tree">트리</button><button class="vbtn" data-v="log">로그</button>
+  </div>
 </div>
 
 <main>
   <section class="logs" id="logs"></section>
+  <section class="logs tree-pane" id="treePane" hidden></section>
   <aside class="tray">
     <h2>이슈 트레이 <span class="hint">자동 그룹핑</span></h2>
     <div id="tray"><p class="empty">아직 이슈 없음</p></div>
   </aside>
 </main>
-
-<section class="dash" id="tree" hidden>
-  <div class="dash-inner">
-    <div class="dash-head">
-      <h2 id="treeTitle">계층</h2>
-      <span class="hint">펼친 만큼만 보입니다 — 로그에 남은 것으로 세운 트리</span>
-      <button id="treeClose" class="btn">닫기</button>
-    </div>
-    <div id="treeBody" class="dash-body"></div>
-  </div>
-</section>
 
 <section class="dash" id="dash" hidden>
   <div class="dash-inner">

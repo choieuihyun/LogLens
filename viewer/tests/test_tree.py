@@ -21,6 +21,7 @@ CFG = Config.from_dict({
         "events": ["ORG_FETCH_OK"],
         "node": "dept", "parent": "parent", "name": "deptName",
         "metrics": ["subDept", "users"],
+        "childCount": "subDept", "depthField": "depth",
     }],
 })
 TREE = CFG.trees[0]
@@ -112,8 +113,16 @@ class TestRobustness(unittest.TestCase):
         t = build([line("A", parent="A")])
         self.assertEqual(t["rootCount"], 1)
 
-    def test_빈_값은_건너뛴다(self):
-        t = build([line("-", parent="-"), line("D1")])
+    def test_식별자가_비어도_최상위로_살린다(self):
+        # 예전에는 이 줄을 버렸다. 그러면 "자식이 몇 개여야 하는지" 가 통째로 날아간다.
+        t = build([line("-", parent="-", name="조직도"), line("D1", parent="-")])
+        self.assertEqual(t["nodeCount"], 2)
+        self.assertEqual(t["rootCount"], 1)
+        self.assertEqual(t["roots"][0]["name"], "조직도")
+
+    def test_노드_식별자_자체가_없으면_건너뛴다(self):
+        bad = "08-12 10:00:00.000  1  1 D UC_MEMBER: evt=ORG_FETCH_OK deptName=이름만"
+        t = build([bad, line("D1")])
         self.assertEqual(t["nodeCount"], 1)
 
     def test_다른_도메인과_다른_이벤트는_안_섞인다(self):
@@ -129,22 +138,108 @@ class TestRobustness(unittest.TestCase):
         self.assertEqual((t["nodeCount"], t["rootCount"], t["maxDepth"]), (0, 0, 0))
 
 
-class TestRealDeviceShape(unittest.TestCase):
-    """실기기에서 관찰한 모양 — 회귀 방지."""
+class TestRootSentinel(unittest.TestCase):
+    """최상위 노드는 식별자가 비어 있다("-"). 이걸 버리면 트리가 쪼개진다."""
 
-    def test_실기기에서_본_구조가_그대로_선다(self):
+    def test_식별자가_빈_최상위_노드를_살린다(self):
+        t = build([line("-", name="조직도", subDept=7, depth=0)])
+        self.assertEqual(t["nodeCount"], 1)
+        self.assertEqual(t["roots"][0]["name"], "조직도")
+        self.assertEqual(t["roots"][0]["expected"], 7)
+
+    def test_parent_가_대시면_최상위의_자식이지_고아가_아니다(self):
         t = build([
-            line("D1523", name="CEO", subDept=1, users=1),
-            line("D123", name="솔루션본부", subDept=2, users=1),
-            line("D1532", parent="D123", name="개발팀", subDept=2, users=1),
-            line("D1524", name="영업팀", subDept=0, users=3),
+            line("-", name="조직도", subDept=2, depth=0),
+            line("D1", parent="-", name="CEO", depth=1),
+            line("D2", parent="-", name="영업팀", depth=1),
         ])
-        self.assertEqual(t["nodeCount"], 4)
-        self.assertEqual(t["rootCount"], 3)
+        self.assertEqual(t["rootCount"], 1, "루트 하나로 모여야 한다")
         self.assertEqual(t["orphanCount"], 0)
-        self.assertEqual(t["maxDepth"], 1)
-        sol = next(r for r in t["roots"] if r["id"] == "D123")
-        self.assertEqual([c["id"] for c in sol["children"]], ["D1532"])
+        self.assertEqual([c["id"] for c in t["roots"][0]["children"]], ["D1", "D2"])
+
+    def test_최상위를_못_봤으면_각자_뿌리가_된다(self):
+        t = build([line("D1", parent="-"), line("D2", parent="-")])
+        self.assertEqual(t["rootCount"], 2)
+        self.assertEqual(t["orphanCount"], 0)
+
+
+class TestUnexpanded(unittest.TestCase):
+    """앱이 '자식 N개' 라고 했는데 몇 개만 본 경우 — 어디를 더 펼쳐야 하는지."""
+
+    def test_안_펼친_자식_수를_센다(self):
+        t = build([
+            line("D1", name="본사", subDept=3),
+            line("D2", parent="D1", subDept=0),
+        ])
+        root = t["roots"][0]
+        self.assertEqual(root["expected"], 3)
+        self.assertEqual(root["missing"], 2)
+        self.assertEqual(t["missingTotal"], 2)
+
+    def test_다_펼쳤으면_안_펼친_게_없다(self):
+        t = build([
+            line("D1", subDept=1),
+            line("D2", parent="D1", subDept=0),
+        ])
+        self.assertEqual(t["missingTotal"], 0)
+
+
+class TestDepthValidation(unittest.TestCase):
+    """depth 는 parent 와 중복 정보다. 트리는 parent 로만 세우고 depth 는 검증에 쓴다."""
+
+    def test_깊이가_맞으면_불일치_0(self):
+        t = build([
+            line("-", depth=0, subDept=1),
+            line("D1", parent="-", depth=1),
+            line("D2", parent="D1", depth=2),
+        ])
+        self.assertEqual(t["depthMismatch"], 0)
+
+    def test_parent_가_잘못되면_깊이_불일치로_드러난다(self):
+        # 앱은 depth=2 라는데 parent 로 세우면 0 이다 → parent 필드가 깨졌다는 신호
+        t = build([line("D2", parent="없는부서", depth=2)])
+        self.assertEqual(t["depthMismatch"], 1)
+        self.assertTrue(t["roots"][0]["depthMismatch"])
+
+
+class TestRealDeviceShape(unittest.TestCase):
+    """실기기 표본 그대로 — 회귀 방지."""
+
+    SAMPLE = [
+        line("-", name="조직도", depth=0, subDept=7, users=0),
+        line("D1523", parent="-", name="CEO", depth=1, subDept=1, users=1),
+        line("D549", parent="D1523", name="연구소", depth=2, subDept=0, users=1),
+        line("D123", parent="-", name="솔루션_사업본부", depth=1, subDept=2, users=1),
+        line("D1532", parent="D123", name="개발팀", depth=2, subDept=2, users=1),
+        line("D538", parent="D1532", name="서버", depth=3, subDept=1, users=3),
+        line("D539", parent="D1532", name="클라이언트", depth=3, subDept=4, users=1),
+        line("D1524", parent="-", name="영업팀", depth=1, subDept=0, users=3),
+    ]
+
+    def test_실기기_표본이_한_트리로_선다(self):
+        t = build(self.SAMPLE)
+        self.assertEqual(t["nodeCount"], 8)
+        self.assertEqual(t["rootCount"], 1)
+        self.assertEqual(t["orphanCount"], 0)
+        self.assertEqual(t["maxDepth"], 3)
+        self.assertEqual(t["depthMismatch"], 0, "parent 로 세운 깊이가 앱의 depth 와 맞아야 한다")
+
+    def test_가지가_제대로_갈라진다(self):
+        t = build(self.SAMPLE)
+        root = t["roots"][0]
+        self.assertEqual([c["name"] for c in root["children"]],
+                         ["CEO", "솔루션_사업본부", "영업팀"])
+        dev = root["children"][1]["children"][0]
+        self.assertEqual(dev["name"], "개발팀")
+        self.assertEqual([c["name"] for c in dev["children"]], ["서버", "클라이언트"])
+
+    def test_안_펼친_가지가_보인다(self):
+        t = build(self.SAMPLE)
+        root = t["roots"][0]
+        self.assertEqual(root["missing"], 4, "루트는 7개라는데 3개만 봤다")
+        client = t["roots"][0]["children"][1]["children"][0]["children"][1]
+        self.assertEqual(client["name"], "클라이언트")
+        self.assertEqual(client["missing"], 4)
 
 
 if __name__ == "__main__":

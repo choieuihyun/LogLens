@@ -28,6 +28,9 @@ const state = {
   paused: false,
   autoscroll: true,
   issueFilter: null,      // {ruleId, key}
+  view: 'tree',           // 트리가 있는 탭에서 '트리' | '로그'
+  collapsed: new Set(),   // 접어 둔 노드 id
+  treeData: null,
   dirty: true,
 };
 
@@ -36,7 +39,6 @@ async function boot() {
   state.cfg = await (await fetch('/api/config')).json();
   $('src').textContent = describeSource(state.cfg.source);
   applyPid(state.cfg.source);
-  $('btnTree').hidden = !(state.cfg.trees && state.cfg.trees.length);
   buildTabs();
   buildLevels();
   wire();
@@ -50,6 +52,8 @@ async function boot() {
   connect();
   setInterval(render, 100);
   setInterval(pollIssues, 1500);
+  refreshTree();
+  setInterval(refreshTree, 2500);
 }
 
 /* 대상 앱 pid 필터. pid 를 아는 소스(adb + --package)에서만 노출한다. */
@@ -119,7 +123,11 @@ function buildTabs() {
     d.className = 'tab' + (t.id === state.tab ? ' on' : '');
     d.dataset.id = t.id;
     d.innerHTML = `${esc(t.label)}<span class="n" data-n="${esc(t.id)}">0</span>`;
-    d.onclick = () => { state.tab = t.id; buildTabs(); state.dirty = true; };
+    d.onclick = () => {
+      state.tab = t.id;
+      state.view = treeOfTab(t.id) ? 'tree' : 'log';
+      buildTabs(); state.dirty = true;
+    };
     el.appendChild(d);
   }
 }
@@ -161,8 +169,9 @@ function wire() {
     state.dirty = true;
   };
   $('btnDash').onclick = openDash;
-  $('btnTree').onclick = openTree;
-  $('treeClose').onclick = () => { $('tree').hidden = true; };
+  for (const b of document.querySelectorAll('.vbtn')) {
+    b.onclick = () => { state.view = b.dataset.v; state.dirty = true; };
+  }
   $('dashClose').onclick = () => { $('dash').hidden = true; };
   // 사용자가 위로 스크롤하면 자동스크롤을 끈다 (읽는 중에 끌려가지 않게)
   $('logs').addEventListener('scroll', () => {
@@ -260,10 +269,99 @@ function render() {
   $('cShown').textContent = shown.length;
   $('cTotal').textContent = state.records.length;
 
+  // 계층 규칙이 붙은 탭이면 트리/로그를 고를 수 있다.
+  const tree = treeOfTab(state.tab);
+  $('viewSw').hidden = !tree;
+  for (const b of document.querySelectorAll('.vbtn')) {
+    b.classList.toggle('on', b.dataset.v === state.view);
+  }
+  const showTree = !!tree && state.view === 'tree';
+  $('treePane').hidden = !showTree;
+  $('logs').hidden = showTree;
+
+  if (showTree) { renderTree(tree); return; }
+
   const slice = shown.slice(-MAX_RENDER);
   const logs = $('logs');
   logs.innerHTML = slice.map(rowHtml).join('');
   if (state.autoscroll) logs.scrollTop = logs.scrollHeight;
+}
+
+/* ── 계층 트리 ─────────────────────────────────────── */
+/* 별도 화면이 아니라 도메인 탭 안에서 본다. '전체' 탭은 로그가 너무 많아 제외.
+   뷰어는 언제나 부분 트리만 본다 — 사용자가 펼친 것만 로그가 남으니까. */
+
+function treeOfTab(tabId) {
+  if (tabId === 'all' || tabId === '__other') return null;
+  const tab = tabOf(tabId);
+  if (!tab) return null;
+  return (state.cfg.trees || []).find((x) => (tab.domains || []).includes(x.domain)) || null;
+}
+
+async function refreshTree() {
+  try {
+    const all = await (await fetch('/api/tree')).json();
+    state.treeData = {};
+    for (const t of all) state.treeData[t.id] = t;
+    if (treeOfTab(state.tab)) state.dirty = true;
+  } catch (_) {}
+}
+
+function renderTree(cfgTree) {
+  const t = state.treeData && state.treeData[cfgTree.id];
+  const el = $('treePane');
+  if (!t) { el.innerHTML = '<p class="empty">세우는 중…</p>'; return; }
+  if (!t.nodeCount) {
+    el.innerHTML = '<p class="empty">아직 계층 로그가 없습니다. 앱에서 해당 화면을 펼쳐 보세요.</p>';
+    return;
+  }
+  const sum = `<div class="tsum">
+    <span>노드 <b>${t.nodeCount}</b></span>
+    <span>뿌리 <b>${t.rootCount}</b></span>
+    <span>최대 깊이 <b>${t.maxDepth}</b></span>
+    ${t.missingTotal ? `<span class="warn">안 펼친 자식 <b>${t.missingTotal}</b></span>` : ''}
+    ${t.orphanCount ? `<span class="warn">부모 못 찾음 <b>${t.orphanCount}</b></span>` : ''}
+    ${t.depthMismatch ? `<span class="warn" title="parent 로 세운 깊이가 앱이 적어 준 depth 와 다릅니다. parent 필드를 확인하세요.">깊이 불일치 <b>${t.depthMismatch}</b></span>` : ''}
+  </div>`;
+  el.innerHTML = sum + t.roots.map(nodeHtml).join('');
+
+  for (const n of el.querySelectorAll('.tnode')) {
+    n.onclick = (ev) => {
+      const id = n.dataset.id;
+      // 화살표를 누르면 접기/펼치기, 노드 본문을 누르면 그 노드 로그만 보기
+      if (ev.target.classList.contains('caret')) {
+        state.collapsed.has(id) ? state.collapsed.delete(id) : state.collapsed.add(id);
+      } else {
+        $('q').value = id;
+        state.q = id;
+        compileQuery();
+        state.view = 'log';
+      }
+      state.dirty = true;
+    };
+  }
+}
+
+function nodeHtml(n) {
+  const kids = n.children || [];
+  const isCollapsed = state.collapsed.has(n.id);
+  const caret = kids.length
+    ? `<span class="caret">${isCollapsed ? '▸' : '▾'}</span>`
+    : '<span class="caret leaf">·</span>';
+  const metrics = Object.entries(n.metrics || {})
+    .map(([k, v]) => `<span class="tw-m">${esc(k)}=${esc(v)}</span>`).join(' ');
+  const more = n.missing ? `<span class="tw-more">+${n.missing} 안 펼침</span>` : '';
+  const bad = n.depthMismatch
+    ? `<span class="tw-more" style="color:var(--e);background:rgba(248,113,113,.12)">깊이 ${n.depth}≠${n.loggedDepth}</span>` : '';
+  const sub = kids.length
+    ? `<div class="tkids${isCollapsed ? ' hidden' : ''}">${kids.map(nodeHtml).join('')}</div>` : '';
+  return `<div class="tnode${n.orphan ? ' orphan' : ''}" data-id="${esc(n.id)}"
+      title="${n.orphan ? '부모 줄을 아직 못 봤습니다 · ' : ''}클릭하면 이 노드 로그만 봅니다">
+      ${caret}<span class="tw-id">${esc(n.id)}</span>
+      ${n.name ? `<span class="tw-name">${esc(n.name)}</span>` : ''}
+      ${metrics}${more}${bad}
+      ${n.hits > 1 ? `<span class="tw-hits">×${n.hits}</span>` : ''}
+    </div>${sub}`;
 }
 
 function rowHtml(r) {
@@ -339,45 +437,6 @@ function renderTray() {
       renderTray(); state.dirty = true;
     };
   }
-}
-
-/* ── 계층 트리 ─────────────────────────────────────── */
-/* 뷰어는 언제나 부분 트리만 봅니다 — 사용자가 펼친 것만 로그가 남으니까요.
-   부모를 못 본 노드는 서버가 별도 뿌리로 올려 보내고, 여기서는 표시만 다르게 합니다. */
-async function openTree() {
-  $('tree').hidden = false;
-  $('treeBody').innerHTML = '<p class="nodata">세우는 중…</p>';
-  const trees = await (await fetch('/api/tree')).json();
-  if (!trees.length) { $('treeBody').innerHTML = '<p class="nodata">계층 규칙이 없습니다</p>'; return; }
-  $('treeTitle').textContent = trees.map((t) => t.label).join(' · ');
-  $('treeBody').innerHTML = trees.map(treeHtml).join('');
-}
-
-function treeHtml(t) {
-  if (!t.nodeCount) {
-    return card(esc(t.label),
-      '<p class="nodata">아직 로그가 없습니다. 앱에서 해당 화면을 펼쳐 보세요.</p>');
-  }
-  const sum = `<div class="tsum">
-    <span>노드 <b>${t.nodeCount}</b></span>
-    <span>뿌리 <b>${t.rootCount}</b></span>
-    <span>최대 깊이 <b>${t.maxDepth}</b></span>
-    ${t.orphanCount ? `<span style="color:var(--w)">부모 못 찾음 <b>${t.orphanCount}</b></span>` : ''}
-  </div>`;
-  return card(esc(t.label), sum + `<div class="tree-wrap">${t.roots.map(nodeHtml).join('')}</div>`, true);
-}
-
-function nodeHtml(n) {
-  const metrics = Object.entries(n.metrics || {})
-    .map(([k, v]) => `<span class="tw-m">${esc(k)}=${esc(v)}</span>`).join(' ');
-  const kids = n.children && n.children.length
-    ? `<div class="tkids">${n.children.map(nodeHtml).join('')}</div>` : '';
-  return `<div class="tnode${n.orphan ? ' orphan' : ''}" title="${n.orphan ? '부모 줄을 아직 못 봤습니다' : ''}">
-      <span class="tw-id">${esc(n.id)}</span>
-      ${n.name ? `<span class="tw-name">${esc(n.name)}</span>` : ''}
-      ${metrics}
-      ${n.hits > 1 ? `<span class="tw-hits">×${n.hits}</span>` : ''}
-    </div>${kids}`;
 }
 
 /* ── 대시보드 ──────────────────────────────────────── */

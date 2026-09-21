@@ -136,6 +136,12 @@ class Tree:
     parent: str = "parent"      # 부모 식별자가 든 필드
     name: Optional[str] = None  # 화면에 보여줄 이름 필드 (없으면 식별자만)
     metrics: List[str] = field(default_factory=list)  # 노드에 같이 표시할 숫자 필드
+    # 자식이 몇 개 있어야 하는지 앱이 알려주는 필드 (예: subDept).
+    # 실제로 본 자식 수와 비교해 "아직 안 펼친 게 몇 개" 인지 보여준다.
+    child_count: Optional[str] = None
+    # 앱이 적어 준 깊이 필드 (예: depth). 트리는 parent 로만 세우고, 이건 검증에만 쓴다.
+    # 재구성한 깊이와 어긋나면 parent 가 잘못 들어오고 있다는 신호다.
+    depth_field: Optional[str] = None
 
     def matches(self, rec: Record) -> bool:
         if rec.kind != STRUCTURED or rec.domain != self.domain:
@@ -145,7 +151,8 @@ class Tree:
     def to_dict(self) -> dict:
         return {"id": self.id, "label": self.label, "domain": self.domain,
                 "events": self.events, "node": self.node, "parent": self.parent,
-                "name": self.name, "metrics": self.metrics}
+                "name": self.name, "metrics": self.metrics,
+                "childCount": self.child_count, "depthField": self.depth_field}
 
 
 @dataclass
@@ -206,7 +213,9 @@ class Config:
             trees=[Tree(id=x["id"], label=x.get("label", x["id"]),
                         domain=x["domain"], events=x.get("events", []),
                         node=x.get("node", "id"), parent=x.get("parent", "parent"),
-                        name=x.get("name"), metrics=x.get("metrics", []))
+                        name=x.get("name"), metrics=x.get("metrics", []),
+                        child_count=x.get("childCount"),
+                        depth_field=x.get("depthField"))
                    for x in d.get("trees", [])],
             outcome=Outcome(**{
                 "success": d.get("outcome", {}).get("success", Outcome().success),
