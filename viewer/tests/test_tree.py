@@ -42,9 +42,10 @@ def line(dept, parent="-", name=None, event="ORG_FETCH_OK", domain="MEMBER",
 
 
 def user(dept, uid, name, org="ucware"):
-    """부서 아래 사람 한 명."""
-    return (f"08-12 10:00:00.000  1  1 D UC_MEMBER: evt=ORG_USER "
-            f"orgId={org} dept={dept} uid={uid} name={name}")
+    """부서 아래 사람 한 명. org=None 이면 범위 필드가 아예 없는 줄."""
+    head = f"evt=ORG_USER" + (f" orgId={org}" if org else "")
+    return (f"08-12 10:00:00.000  1  1 D UC_MEMBER: {head} "
+            f"dept={dept} uid={uid} name={name}")
 
 
 def truncated(dept, skipped, org="ucware"):
@@ -369,6 +370,30 @@ class TestPeople(unittest.TestCase):
                    line("D2", parent="D1", subDept=0),
                    user("D1", "kim", "김")])
         self.assertEqual(t["roots"][0]["missing"], 1)
+
+    def test_범위_필드가_없는_줄도_부모_조직으로_붙는다(self):
+        # 실기기에서 ORG_USER 에 orgId 가 안 붙어 있었다. 그대로 두면 사람들이
+        # 빈 범위에 갇혀 전부 고아가 된다.
+        t = build([
+            line("-", name="조직도", subDept=1),
+            line("D1", parent="-", name="개발팀", subDept=0),
+            user("D1", "u1", "사람1", org=None),
+            user("D1", "u2", "사람2", org=None),
+        ])
+        self.assertEqual(t["scopeCount"], 1)
+        self.assertEqual(t["orphanCount"], 0)
+        dept = t["roots"][0]["children"][0]
+        self.assertEqual([c["name"] for c in dept["children"]], ["사람1", "사람2"])
+
+    def test_부모가_여러_조직에_있으면_옮기지_않는다(self):
+        # 애매하면 건드리지 않는다. 잘못 붙이는 것보다 고아로 두는 게 낫다.
+        t = build([
+            line("D1", name="우리부서", org="a", subDept=0),
+            line("D1", name="남의부서", org="b", subDept=0),
+            user("D1", "u1", "사람1", org=None),
+        ])
+        person = next(r for r in t["roots"] if r["kind"] == "leaf")
+        self.assertTrue(person.get("orphan"))
 
     def test_생략된_인원을_표시한다(self):
         t = build([line("D1", name="개발팀", subDept=0),

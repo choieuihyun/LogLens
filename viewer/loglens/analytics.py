@@ -246,6 +246,31 @@ def build_tree(records: List[Record], cfg_tree) -> dict:
             except ValueError:
                 pass
 
+    # 범위 필드가 없는 줄이 섞일 수 있다(예: 사람 줄에 orgId 가 안 붙는 경우).
+    # 그대로 두면 빈 범위에 갇혀 부모를 못 찾는다. 부모가 다른 범위에 **유일하게**
+    # 있으면 그 범위로 옮긴다. 여러 범위에 있으면 애매하므로 건드리지 않는다.
+    if scope_f:
+        scopes_of_id: Dict[str, set] = {}
+        for (sc, ident), n in nodes.items():
+            if n["kind"] == "node":
+                scopes_of_id.setdefault(n["id"], set()).add(sc)
+        moved = []
+        for key in list(nodes):
+            sc, ident = key
+            n = nodes[key]
+            if sc or not n["parent"]:
+                continue
+            cands = scopes_of_id.get(n["parent"], set()) - {""}
+            if len(cands) == 1:
+                moved.append((key, (next(iter(cands)), ident)))
+        for old, new in moved:
+            if new in nodes:          # 이미 같은 자리에 있으면 합치지 않는다
+                continue
+            n = nodes.pop(old)
+            n["scope"] = new[0]
+            nodes[new] = n
+            order[order.index(old)] = new
+
     for (sc, pid), cnt in truncated.items():
         holder = nodes.get((sc, pid))
         if holder is not None:
