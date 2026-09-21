@@ -24,6 +24,15 @@ PID = 4321
 
 LOGIN_FUNNEL = ["LOGIN_START", "CREDENTIAL_CHECK", "TOKEN_ISSUE", "PROFILE_FETCH", "LOGIN_OK"]
 
+# 조직도 같은 계층 화면. (부모, 자식들) — 사용자가 펼친 것만 로그가 남는 걸 흉내낸다.
+ORG_TREE = {
+    None:   [("N1", "본사")],
+    "N1":   [("N11", "연구소"), ("N12", "영업본부")],
+    "N11":  [("N111", "플랫폼팀"), ("N112", "앱개발팀")],
+    "N112": [("N1121", "안드로이드"), ("N1122", "iOS")],
+    "N12":  [("N121", "국내영업"), ("N122", "해외영업")],
+}
+
 CRASH_STACK = [
     ("E", "AndroidRuntime", "FATAL EXCEPTION: main"),
     ("E", "AndroidRuntime", "Process: io.loglens.sample, PID: %d" % PID),
@@ -112,6 +121,29 @@ class SyntheticSource(LogSource):
                           f"uid={self.rnd.randint(100, 999)} token=*** authType=oauth2",
                           "authType 은 마스킹되지 않는다 (정확 키 매칭)")]
 
+    def _org(self) -> List[str]:
+        """계층 화면을 한 단계 펼친 것처럼 찍는다.
+
+        실제 앱과 똑같이 **펼친 노드만** 남는다. 그래서 뷰어는 언제나 부분 트리를 본다.
+        """
+        parent = self.rnd.choice([k for k in ORG_TREE if k is not None])
+        kids = ORG_TREE[parent]
+        node, title = self.rnd.choice(kids)
+        sub = len(ORG_TREE.get(node, []))
+        return [self._evt(
+            "D", "ORG", "NODE_FETCH_OK",
+            f"node={node} parent={parent} title={title} "
+            f"children={sub} items={self.rnd.randint(0, 9)}",
+            f"계층 호출: {title} 하위 {sub}개",
+        )]
+
+    def _org_root(self) -> List[str]:
+        node, title = ORG_TREE[None][0]
+        return [self._evt("D", "ORG", "NODE_FETCH_OK",
+                          f"node={node} parent=- title={title} "
+                          f"children={len(ORG_TREE.get(node, []))} items=0",
+                          f"계층 호출: {title}")]
+
     def _legacy(self) -> List[str]:
         lv, tag, body = self.rnd.choice(LEGACY_NOISE)
         return [self._line(lv, tag, body)]
@@ -133,8 +165,12 @@ class SyntheticSource(LogSource):
             return self._net()
         if roll < 0.76:
             return self._file()
-        if roll < 0.82:
+        if roll < 0.80:
             return self._masked()
+        if roll < 0.84:
+            return self._org_root()
+        if roll < 0.92:
+            return self._org()
         if roll < 0.96:
             return self._legacy()
         if roll < 0.99:

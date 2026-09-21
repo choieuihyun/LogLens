@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Deque, List, Optional
 from urllib.parse import parse_qs, urlparse
 
-from .analytics import IssueTray, aggregate
+from .analytics import IssueTray, aggregate, build_tree
 from .config import Config
 from .parser import Parser, Record
 from .sources.base import MARKER, LogSource
@@ -105,6 +105,12 @@ class Hub:
             recs = list(self.buffer)
         return aggregate(recs, self.cfg)
 
+    def trees(self) -> list:
+        """설정에 적힌 계층 규칙대로 트리를 세워 돌려준다."""
+        with self._lock:
+            recs = list(self.buffer)
+        return [build_tree(recs, x) for x in self.cfg.trees]
+
 
 class Reader(threading.Thread):
     """소스를 읽어 Hub 에 밀어넣는 단일 스레드."""
@@ -182,6 +188,8 @@ def _handler_factory(hub: Hub, source: LogSource):
                 return self._json(hub.snapshot(max(1, limit)))
             if path == "/api/stats":
                 return self._json(hub.stats())
+            if path == "/api/tree":
+                return self._json(hub.trees())
             if path == "/api/stream":
                 return self._sse()
             self.send_error(404)

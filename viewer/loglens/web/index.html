@@ -14,6 +14,7 @@
   <div class="src" id="src"></div>
   <div class="spacer"></div>
   <div class="counts"><b id="cShown">0</b> / <span id="cTotal">0</span> 줄</div>
+  <button id="btnTree" class="btn" hidden>계층</button>
   <button id="btnDash" class="btn">분석</button>
   <button id="btnPause" class="btn">일시정지</button>
   <button id="btnClear" class="btn">비우기</button>
@@ -37,6 +38,17 @@
     <div id="tray"><p class="empty">아직 이슈 없음</p></div>
   </aside>
 </main>
+
+<section class="dash" id="tree" hidden>
+  <div class="dash-inner">
+    <div class="dash-head">
+      <h2 id="treeTitle">계층</h2>
+      <span class="hint">펼친 만큼만 보입니다 — 로그에 남은 것으로 세운 트리</span>
+      <button id="treeClose" class="btn">닫기</button>
+    </div>
+    <div id="treeBody" class="dash-body"></div>
+  </div>
+</section>
 
 <section class="dash" id="dash" hidden>
   <div class="dash-inner">

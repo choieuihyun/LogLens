@@ -36,6 +36,7 @@ async function boot() {
   state.cfg = await (await fetch('/api/config')).json();
   $('src').textContent = describeSource(state.cfg.source);
   applyPid(state.cfg.source);
+  $('btnTree').hidden = !(state.cfg.trees && state.cfg.trees.length);
   buildTabs();
   buildLevels();
   wire();
@@ -160,6 +161,8 @@ function wire() {
     state.dirty = true;
   };
   $('btnDash').onclick = openDash;
+  $('btnTree').onclick = openTree;
+  $('treeClose').onclick = () => { $('tree').hidden = true; };
   $('dashClose').onclick = () => { $('dash').hidden = true; };
   // 사용자가 위로 스크롤하면 자동스크롤을 끈다 (읽는 중에 끌려가지 않게)
   $('logs').addEventListener('scroll', () => {
@@ -336,6 +339,45 @@ function renderTray() {
       renderTray(); state.dirty = true;
     };
   }
+}
+
+/* ── 계층 트리 ─────────────────────────────────────── */
+/* 뷰어는 언제나 부분 트리만 봅니다 — 사용자가 펼친 것만 로그가 남으니까요.
+   부모를 못 본 노드는 서버가 별도 뿌리로 올려 보내고, 여기서는 표시만 다르게 합니다. */
+async function openTree() {
+  $('tree').hidden = false;
+  $('treeBody').innerHTML = '<p class="nodata">세우는 중…</p>';
+  const trees = await (await fetch('/api/tree')).json();
+  if (!trees.length) { $('treeBody').innerHTML = '<p class="nodata">계층 규칙이 없습니다</p>'; return; }
+  $('treeTitle').textContent = trees.map((t) => t.label).join(' · ');
+  $('treeBody').innerHTML = trees.map(treeHtml).join('');
+}
+
+function treeHtml(t) {
+  if (!t.nodeCount) {
+    return card(esc(t.label),
+      '<p class="nodata">아직 로그가 없습니다. 앱에서 해당 화면을 펼쳐 보세요.</p>');
+  }
+  const sum = `<div class="tsum">
+    <span>노드 <b>${t.nodeCount}</b></span>
+    <span>뿌리 <b>${t.rootCount}</b></span>
+    <span>최대 깊이 <b>${t.maxDepth}</b></span>
+    ${t.orphanCount ? `<span style="color:var(--w)">부모 못 찾음 <b>${t.orphanCount}</b></span>` : ''}
+  </div>`;
+  return card(esc(t.label), sum + `<div class="tree-wrap">${t.roots.map(nodeHtml).join('')}</div>`, true);
+}
+
+function nodeHtml(n) {
+  const metrics = Object.entries(n.metrics || {})
+    .map(([k, v]) => `<span class="tw-m">${esc(k)}=${esc(v)}</span>`).join(' ');
+  const kids = n.children && n.children.length
+    ? `<div class="tkids">${n.children.map(nodeHtml).join('')}</div>` : '';
+  return `<div class="tnode${n.orphan ? ' orphan' : ''}" title="${n.orphan ? '부모 줄을 아직 못 봤습니다' : ''}">
+      <span class="tw-id">${esc(n.id)}</span>
+      ${n.name ? `<span class="tw-name">${esc(n.name)}</span>` : ''}
+      ${metrics}
+      ${n.hits > 1 ? `<span class="tw-hits">×${n.hits}</span>` : ''}
+    </div>${kids}`;
 }
 
 /* ── 대시보드 ──────────────────────────────────────── */

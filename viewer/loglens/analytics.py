@@ -146,3 +146,101 @@ def _funnel(records: List[Record], f) -> dict:
         })
     return {"id": f.id, "label": f.label, "domain": f.domain,
             "mode": mode, "steps": steps}
+
+
+# ── 계층 재구성 ──────────────────────────────────────────────────────────────
+
+def build_tree(records: List[Record], cfg_tree) -> dict:
+    """평평한 로그에서 계층을 되살린다.
+
+    조직도처럼 "누르면 그 아래를 불러오는" 화면은 펼친 만큼만 로그가 남는다.
+    그래서 뷰어가 보는 것은 **언제나 부분 트리**다. 세 가지를 견뎌야 한다.
+
+    1. **부모를 못 본 노드** — 사용자가 중간부터 펼쳤을 때. 버리지 않고 별도 뿌리로 올린다.
+    2. **같은 노드가 여러 번** — 접었다 펴면 또 찍힌다. 마지막 것으로 갱신하고 횟수를 센다.
+    3. **순환 참조** — 서버 데이터가 서로를 가리키면 깊이 계산이 멈추지 않는다. 상한을 둔다.
+    """
+    nodes: Dict[str, dict] = {}
+    order: List[str] = []
+
+    for r in records:
+        if not cfg_tree.matches(r):
+            continue
+        nid = r.fields.get(cfg_tree.node)
+        if not nid or nid == "-":
+            continue
+        pid = r.fields.get(cfg_tree.parent)
+        if pid == "-":
+            pid = None
+
+        n = nodes.get(nid)
+        if n is None:
+            n = {
+                "id": nid,
+                "parent": pid,
+                "name": r.fields.get(cfg_tree.name) if cfg_tree.name else None,
+                "metrics": {},
+                "hits": 0,
+                "lastTs": None,
+                "children": [],
+            }
+            nodes[nid] = n
+            order.append(nid)
+        # 접었다 펴면 또 찍힌다. 마지막 값으로 갱신하되 횟수는 누적한다.
+        n["hits"] += 1
+        n["lastTs"] = r.ts
+        if pid:
+            n["parent"] = pid
+        if cfg_tree.name and r.fields.get(cfg_tree.name):
+            n["name"] = r.fields[cfg_tree.name]
+        for m in cfg_tree.metrics:
+            if m in r.fields:
+                n["metrics"][m] = r.fields[m]
+
+    # 부모-자식 잇기. 부모를 못 본 노드는 뿌리로 올린다.
+    roots: List[dict] = []
+    orphans = 0
+    for nid in order:
+        n = nodes[nid]
+        p = nodes.get(n["parent"]) if n["parent"] else None
+        if p is not None and p is not n:
+            p["children"].append(n)
+        else:
+            if n["parent"]:
+                n["orphan"] = True      # 부모 이름은 아는데 그 줄을 못 봄
+                orphans += 1
+            roots.append(n)
+
+    _assign_depth(roots)
+    return {
+        "id": cfg_tree.id,
+        "label": cfg_tree.label,
+        "roots": roots,
+        "nodeCount": len(nodes),
+        "rootCount": len(roots),
+        "orphanCount": orphans,
+        "maxDepth": max((_max_depth(r) for r in roots), default=0),
+    }
+
+
+_DEPTH_MAX = 64     # 서버 데이터가 서로를 가리켜도 멈추게 한다
+
+
+def _assign_depth(roots: List[dict]) -> None:
+    stack = [(r, 0) for r in reversed(roots)]
+    seen = set()
+    while stack:
+        n, d = stack.pop()
+        if id(n) in seen or d > _DEPTH_MAX:
+            n["children"] = []          # 순환이면 잘라낸다
+            continue
+        seen.add(id(n))
+        n["depth"] = d
+        for c in reversed(n["children"]):
+            stack.append((c, d + 1))
+
+
+def _max_depth(n: dict) -> int:
+    if not n["children"]:
+        return n.get("depth", 0)
+    return max(_max_depth(c) for c in n["children"])

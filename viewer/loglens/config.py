@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from .parser import Record
+from .parser import Record, STRUCTURED
 
 # 규칙이 검사할 수 있는 레코드 속성 화이트리스트.
 _MATCHABLE = ("kind", "level", "tag", "domain", "event", "msg", "raw")
@@ -119,6 +119,36 @@ class Funnel:
 
 
 @dataclass
+class Tree:
+    """계층 로그를 트리로 다시 세우는 규칙.
+
+    조직도나 주소록처럼 "누르면 그 아래를 불러오는" 화면은 로그가 평평하게 쌓입니다.
+    각 줄에 자기 부모가 적혀 있으면 계층을 되살릴 수 있습니다.
+
+    뷰어는 언제나 **부분 트리**만 봅니다. 사용자가 펼친 것만 로그가 찍히니까요.
+    그래서 부모를 못 찾은 노드도 버리지 않고 별도 뿌리로 올립니다.
+    """
+    id: str
+    label: str
+    domain: str
+    events: List[str] = field(default_factory=list)
+    node: str = "id"            # 이 노드의 식별자가 든 필드
+    parent: str = "parent"      # 부모 식별자가 든 필드
+    name: Optional[str] = None  # 화면에 보여줄 이름 필드 (없으면 식별자만)
+    metrics: List[str] = field(default_factory=list)  # 노드에 같이 표시할 숫자 필드
+
+    def matches(self, rec: Record) -> bool:
+        if rec.kind != STRUCTURED or rec.domain != self.domain:
+            return False
+        return not self.events or rec.event in self.events
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "label": self.label, "domain": self.domain,
+                "events": self.events, "node": self.node, "parent": self.parent,
+                "name": self.name, "metrics": self.metrics}
+
+
+@dataclass
 class Outcome:
     """이벤트 이름 접미사로 성공/실패를 판정한다 (기획서 §9-4 이름 거버넌스의 보상)."""
     success: List[str] = field(default_factory=lambda: ["_OK", "_SUCCESS", "_DONE"])
@@ -146,6 +176,7 @@ class Config:
     tabs: List[Tab] = field(default_factory=list)
     issue_rules: List[IssueRule] = field(default_factory=list)
     funnels: List[Funnel] = field(default_factory=list)
+    trees: List[Tree] = field(default_factory=list)
     outcome: Outcome = field(default_factory=Outcome)
 
     @staticmethod
@@ -172,6 +203,11 @@ class Config:
             funnels=[Funnel(id=f["id"], label=f.get("label", f["id"]),
                             domain=f.get("domain", ""), steps=f.get("steps", []))
                      for f in d.get("funnels", [])],
+            trees=[Tree(id=x["id"], label=x.get("label", x["id"]),
+                        domain=x["domain"], events=x.get("events", []),
+                        node=x.get("node", "id"), parent=x.get("parent", "parent"),
+                        name=x.get("name"), metrics=x.get("metrics", []))
+                   for x in d.get("trees", [])],
             outcome=Outcome(**{
                 "success": d.get("outcome", {}).get("success", Outcome().success),
                 "failure": d.get("outcome", {}).get("failure", Outcome().failure),
@@ -194,6 +230,7 @@ class Config:
             "tabs": [t.to_dict() for t in self.tabs],
             "issueRules": [r.to_dict() for r in self.issue_rules],
             "funnels": [f.to_dict() for f in self.funnels],
+            "trees": [x.to_dict() for x in self.trees],
         }
 
 

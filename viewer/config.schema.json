@@ -6,8 +6,9 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "$schema": { "type": "string" },
-
+    "$schema": {
+      "type": "string"
+    },
     "prefix": {
       "type": "string",
       "default": "APP",
@@ -19,23 +20,34 @@
       "description": "대상 앱 패키지. adb 소스에서 pid 자동추적에 쓴다."
     },
     "bufferSize": {
-      "type": "integer", "minimum": 100, "maximum": 1000000, "default": 20000,
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 1000000,
+      "default": 20000,
       "description": "서버 링버퍼 크기(줄). 대시보드 집계 범위와 같다."
     },
-
     "tabs": {
       "type": "array",
       "description": "도메인 탭. 원클릭 필터.",
       "items": {
         "type": "object",
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string" },
-          "label": { "type": "string" },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
           "domains": {
             "type": "array",
-            "items": { "type": "string", "pattern": "^[A-Z0-9_]+$" },
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_]+$"
+            },
             "description": "이 탭이 모을 도메인들 (태그의 prefix_ 뒷부분)."
           },
           "legacyTagPattern": {
@@ -45,30 +57,58 @@
         }
       }
     },
-
     "issueRules": {
       "type": "array",
       "description": "이슈 트레이 규칙. 무엇을 이슈로 볼지 + 어떻게 그룹핑할지.",
       "items": {
         "type": "object",
-        "required": ["id", "when"],
+        "required": [
+          "id",
+          "when"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string" },
-          "label": { "type": "string" },
-          "severity": { "enum": ["fatal", "error", "warn", "info"], "default": "error" },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "fatal",
+              "error",
+              "warn",
+              "info"
+            ],
+            "default": "error"
+          },
           "when": {
             "type": "object",
             "description": "레코드 속성 → 정규식. 전부 만족해야 매치(AND).",
             "additionalProperties": false,
             "properties": {
-              "kind": { "type": "string" },
-              "level": { "type": "string" },
-              "tag": { "type": "string" },
-              "domain": { "type": "string" },
-              "event": { "type": "string" },
-              "msg": { "type": "string" },
-              "raw": { "type": "string" }
+              "kind": {
+                "type": "string"
+              },
+              "level": {
+                "type": "string"
+              },
+              "tag": {
+                "type": "string"
+              },
+              "domain": {
+                "type": "string"
+              },
+              "event": {
+                "type": "string"
+              },
+              "msg": {
+                "type": "string"
+              },
+              "raw": {
+                "type": "string"
+              }
             }
           },
           "group": {
@@ -76,41 +116,127 @@
             "description": "그룹 키 생성. regex(raw 첫 캡처그룹) 또는 template({domain}/{event}, {f_필드명}).",
             "additionalProperties": false,
             "properties": {
-              "regex": { "type": "string" },
-              "fallback": { "type": "string" },
-              "template": { "type": "string" }
+              "regex": {
+                "type": "string"
+              },
+              "fallback": {
+                "type": "string"
+              },
+              "template": {
+                "type": "string"
+              }
             }
           }
         }
       }
     },
-
     "funnels": {
       "type": "array",
       "description": "세션 퍼널. flowId 필드가 있으면 흐름 단위, 없으면 단순 카운트로 근사.",
       "items": {
         "type": "object",
-        "required": ["id", "domain", "steps"],
+        "required": [
+          "id",
+          "domain",
+          "steps"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string" },
-          "label": { "type": "string" },
-          "domain": { "type": "string", "pattern": "^[A-Z0-9_]+$" },
-          "steps": { "type": "array", "items": { "type": "string" }, "minItems": 2 }
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_]+$"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2
+          }
         }
       }
     },
-
     "outcome": {
       "type": "object",
       "description": "이벤트 이름 접미사로 성공/실패 판정. 이름 거버넌스(기획서 §9-4)의 보상.",
       "additionalProperties": false,
       "properties": {
-        "success": { "type": "array", "items": { "type": "string" } },
-        "failure": { "type": "array", "items": { "type": "string" } },
+        "success": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failure": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "reasonFields": {
-          "type": "array", "items": { "type": "string" },
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
           "description": "실패 사유를 읽을 필드 우선순위."
+        }
+      }
+    },
+    "trees": {
+      "type": "array",
+      "description": "계층 로그를 트리로 다시 세우는 규칙. 조직도·주소록처럼 펼칠 때마다 불러오는 화면용. 각 줄에 자기 부모가 적혀 있어야 한다.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "domain"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_]+$"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "이 이벤트만 사용. 비우면 도메인 전체."
+          },
+          "node": {
+            "type": "string",
+            "default": "id",
+            "description": "노드 식별자가 든 필드 이름"
+          },
+          "parent": {
+            "type": "string",
+            "default": "parent",
+            "description": "부모 식별자가 든 필드 이름. node 와 같은 ID 체계여야 한다."
+          },
+          "name": {
+            "type": "string",
+            "description": "화면에 보여줄 이름 필드 (선택)"
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "노드 옆에 같이 표시할 숫자 필드"
+          }
         }
       }
     }
