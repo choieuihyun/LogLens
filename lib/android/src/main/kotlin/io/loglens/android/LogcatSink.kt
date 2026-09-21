@@ -14,6 +14,13 @@ import io.loglens.core.Sink
  */
 class LogcatSink : Sink {
 
+    /**
+     * `adb shell setprop log.tag.UC_CHAT VERBOSE` 로 켜 둔 도메인은 릴리스에서도 통과시킵니다.
+     * 앱을 다시 빌드하지 않고 특정 도메인만 상세 로그를 켤 수 있습니다.
+     */
+    override fun isForcedOn(level: Level, tag: String): Boolean =
+        Log.isLoggable(tag, priorityOf(level))
+
     override fun write(level: Level, tag: String, body: String) {
         when (level) {
             Level.V -> Log.v(tag, body)
@@ -22,5 +29,13 @@ class LogcatSink : Sink {
             Level.W -> Log.w(tag, body)
             Level.E -> Log.e(tag, body)
         }
+    }
+
+    private fun priorityOf(level: Level): Int = when (level) {
+        Level.V -> Log.VERBOSE
+        Level.D -> Log.DEBUG
+        Level.I -> Log.INFO
+        Level.W -> Log.WARN
+        Level.E -> Log.ERROR
     }
 }

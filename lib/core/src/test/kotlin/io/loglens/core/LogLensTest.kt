@@ -99,4 +99,54 @@ class LogLensTest {
         LogLens.init(false)
         assertFalse(LogLens.isDebug())
     }
+
+    // ── 런타임으로 특정 도메인만 켜기 ──────────────────────────────────────
+    // 릴리스에서 V/D 는 막히지만, 현장에서 "채팅만 상세 로그 보내주세요" 같은 요청이
+    // 옵니다. 앱을 다시 빌드하지 않고 켜려면 출력 대상이 스스로 판단할 수 있어야 합니다.
+    // logcat 쪽은 이걸 Log.isLoggable 로 구현해서 setprop 한 줄로 열립니다.
+
+    /** 특정 태그만 강제로 통과시키는 가짜 출력 대상 */
+    private class ForcingSink(private val openTag: String) : Sink {
+        val got = mutableListOf<String>()
+        override fun isForcedOn(level: Level, tag: String) = tag == openTag
+        override fun write(level: Level, tag: String, body: String) {
+            got += "$tag|$body"
+        }
+    }
+
+    @Test
+    fun `릴리스에서도 런타임으로 켠 도메인은 통과한다`() {
+        val forcing = ForcingSink(openTag = "APP_AUTH")
+        LogLens.clearSinks()
+        LogLens.init(false)          // 릴리스
+        LogLens.addSink(forcing)
+
+        LogLens.d(D.AUTH, "OPENED")       // 켜 둔 도메인 → 통과해야 함
+        LogLens.d(D.FILE_XFER, "BLOCKED") // 안 켠 도메인 → 막혀야 함
+
+        assertEquals(1, forcing.got.size, forcing.got.toString())
+        assertTrue(forcing.got[0].startsWith("APP_AUTH|evt=OPENED"), forcing.got[0])
+    }
+
+    @Test
+    fun `런타임으로 켜지 않으면 릴리스에서 V 와 D 는 그대로 막힌다`() {
+        LogLens.clearSinks()
+        LogLens.init(false)
+        LogLens.addSink(sink)         // isForcedOn 기본값 false
+
+        LogLens.v(D.AUTH, "TRACE")
+        LogLens.d(D.AUTH, "DEBUG")
+        assertEquals(0, sink.size)
+    }
+
+    @Test
+    fun `켜 두지 않아도 I 이상은 항상 나간다`() {
+        val forcing = ForcingSink(openTag = "없는태그")
+        LogLens.clearSinks()
+        LogLens.init(false)
+        LogLens.addSink(forcing)
+
+        LogLens.i(D.AUTH, "ALWAYS")
+        assertEquals(1, forcing.got.size)
+    }
 }

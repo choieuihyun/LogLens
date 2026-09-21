@@ -143,6 +143,23 @@ make aar    # → lib/android/build/outputs/aar/loglens-release.aar  (37KB)
   바이트 단위로 자르면 한글이나 이모지가 깨지는데, 그걸 피합니다
 - **출력 중 예외** — 삼킵니다. 로그 때문에 앱이 죽으면 안 되니까요
 
+### 릴리스 빌드에서 특정 도메인만 열기
+
+현장에서 "채팅만 상세 로그 좀 보내주세요" 같은 요청을 받을 때가 있습니다.
+앱을 다시 빌드하지 않고 켤 수 있습니다.
+
+```bash
+adb shell setprop log.tag.UC_CHAT VERBOSE    # 이 도메인만 열림
+adb shell setprop log.tag.UC_CHAT INFO       # 원래대로
+```
+
+태그가 곧 도메인이라서 도메인 단위 제어가 공짜로 따라옵니다.
+`Sink.isForcedOn()` 이 전역 게이팅을 넘어설지 결정하고, logcat 출력이 이걸
+`Log.isLoggable()` 로 구현합니다. 여기서 막히면 문자열을 아예 만들지 않습니다.
+
+> 태그가 23자를 넘으면 구형 기기에서 `setprop` 키 길이 제한에 걸립니다.
+> 도메인 이름을 정할 때 감안하세요.
+
 ---
 
 ## (B) 뷰어 / 분석기
@@ -281,7 +298,7 @@ make roundtrip
 | | |
 |---|---|
 | 뷰어 (파서·집계·설정·자동생성) | 67개 테스트 통과 |
-| 라이브러리 core | 61개 테스트 통과 (Kotlin, kotlin.test) |
+| 라이브러리 core | 67개 테스트 통과 (Kotlin, kotlin.test) |
 | 양쪽 대조 | 28개 케이스 통과 (Kotlin·Java 두 API 모두) |
 | `--source adb` + `--init` | **실제 기기로 확인** (연결·앱 추적·스트리밍·설정 자동생성) |
 | `make demo` (라이브러리→파일→뷰어) | **실행 확인** |

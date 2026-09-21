@@ -164,9 +164,6 @@ object LogLens {
         t: Throwable?,
         kv: Array<out Any?>?,
     ) {
-        // 릴리스에서 V/D 는 문자열을 만들지도 않습니다.
-        if (!level.enabled(debug)) return
-
         val snapshot: List<Sink>
         val f: Formatter
         synchronized(this) {
@@ -175,9 +172,18 @@ object LogLens {
             f = formatter
         }
 
-        val body = f.body(event, kv, t)
         val tag = domain.tag()
-        for (s in snapshot) {
+
+        // 릴리스에서 V/D 는 막습니다. 다만 출력 대상이 런타임으로 켜 뒀다면 통과시킵니다.
+        // (logcat 은 `setprop log.tag.<태그> VERBOSE` 로 도메인 하나만 열 수 있습니다)
+        // 여기서 끊기면 문자열을 아예 만들지 않습니다.
+        val targets =
+            if (level.enabled(debug)) snapshot
+            else snapshot.filter { it.isForcedOn(level, tag) }
+        if (targets.isEmpty()) return
+
+        val body = f.body(event, kv, t)
+        for (s in targets) {
             try {
                 s.write(level, tag, body)
             } catch (ignored: Throwable) {

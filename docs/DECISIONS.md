@@ -281,6 +281,42 @@ LogLens.i(AppDomain.AUTH, "LOGIN_OK", "uid" to uid, "msg" to "성공")
 이게 두 컴포넌트를 형식으로만 묶어 둔 설계의 값어치다.
 한쪽을 통째로 다른 언어로 다시 써도 반대쪽은 아무것도 몰라도 된다.
 
+## D22. 레벨 게이팅을 출력 대상이 넘어설 수 있게
+
+다른 세션이 짚어준 구멍이다. 기획서와 이 문서 여러 곳에서 "태그가 곧 도메인이라
+`setprop log.tag.<태그> VERBOSE` 로 도메인 단위 제어가 공짜"라고 적어 놓고,
+정작 구현이 없었다. `LogLens.log()` 가 자체 debug 플래그만 보고,
+logcat 출력이 `Log.isLoggable()` 을 확인하지 않아서 setprop 이 아무 효과가 없었다.
+
+**왜 필요한가.** 현장에서 "채팅만 상세 로그 보내주세요" 같은 요청이 온다.
+릴리스 빌드라 V/D 가 막혀 있는데, 이걸 켜려고 앱을 다시 빌드해서 배포할 수는 없다.
+
+**설계.** core 는 안드로이드를 모르므로 `Log.isLoggable` 을 직접 못 부른다.
+그래서 판단을 출력 대상에 위임했다.
+
+```kotlin
+// core — 기본값은 아무것도 바꾸지 않음
+fun Sink.isForcedOn(level: Level, tag: String): Boolean = false
+
+// LogLens.log()
+val targets = if (level.enabled(debug)) snapshot
+              else snapshot.filter { it.isForcedOn(level, tag) }
+if (targets.isEmpty()) return          // 여기서 끊기면 문자열을 안 만든다
+
+// android
+override fun isForcedOn(level, tag) = Log.isLoggable(tag, priorityOf(level))
+```
+
+전역 게이팅이 기본이고, 출력 대상이 **위로만** 넘어설 수 있다. 반대(켜진 걸 끄는 것)는
+안 된다 — 릴리스에서 로그가 새는 방향으로는 열지 않는다.
+
+**대가.** 릴리스에서 V/D 호출마다 `domain.tag()` 와 `isForcedOn()` 이 한 번씩 돈다.
+전에는 즉시 반환이었다. `Log.isLoggable` 은 시스템이 캐시하는 속성 조회라 싸지만
+공짜는 아니다. 문자열 조립은 여전히 안 하므로 큰 비용은 아니라고 판단했다.
+
+**교훈.** 문서에 적어 둔 것과 코드가 다를 수 있다. 이건 서로 다른 세션이
+같은 프로젝트를 다른 각도에서 보다가 걸렸다 — 한쪽은 문서를, 한쪽은 바이트코드를 봤다.
+
 ---
 
 ## 검증되지 않은 것 (정직하게)

@@ -15,6 +15,21 @@ interface Sink {
      */
     fun write(level: Level, tag: String, body: String)
 
+    /**
+     * 전역 레벨 게이팅이 막은 로그라도 이 출력 대상은 받고 싶은가.
+     *
+     * 릴리스 빌드에서는 V/D 가 막힙니다. 그런데 현장에서 "채팅만 상세 로그 좀 보내주세요"
+     * 같은 요청을 받을 때가 있습니다. 앱을 다시 빌드하지 않고 켜려면 출력 대상이
+     * 스스로 판단할 수 있어야 합니다.
+     *
+     * logcat 출력은 이걸 `Log.isLoggable(tag, level)` 로 구현합니다. 그러면
+     * `adb shell setprop log.tag.UC_CHAT VERBOSE` 한 줄로 그 도메인만 열립니다.
+     * 태그가 곧 도메인이라서 도메인 단위 제어가 공짜로 따라옵니다.
+     *
+     * 기본값은 false — 아무것도 바꾸지 않습니다.
+     */
+    fun isForcedOn(level: Level, tag: String): Boolean = false
+
     /** 파일 핸들 등을 정리합니다. 기본은 아무것도 안 합니다. */
     fun close() {}
 }
