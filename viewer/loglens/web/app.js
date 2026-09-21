@@ -305,7 +305,7 @@ function renderTree(cfgTree) {
     <span>노드 <b>${t.nodeCount}</b></span>
     <span>뿌리 <b>${t.rootCount}</b></span>
     <span>최대 깊이 <b>${t.maxDepth}</b></span>
-    ${t.missingTotal ? `<span class="warn">안 펼친 자식 <b>${t.missingTotal}</b></span>` : ''}
+    ${t.missingTotal ? `<span class="warn" title="앱이 알려준 자식 수와 실제로 본 수의 차이입니다. 앱이 세는 기준이 다르면 실제보다 크게 나올 수 있습니다.">아직 못 본 자식 <b>${t.missingTotal}</b></span>` : ''}
     ${t.orphanCount ? `<span class="warn">부모 못 찾음 <b>${t.orphanCount}</b></span>` : ''}
     ${t.depthMismatch ? `<span class="warn" title="parent 로 세운 깊이가 앱이 적어 준 depth 와 다릅니다. parent 필드를 확인하세요.">깊이 불일치 <b>${t.depthMismatch}</b></span>` : ''}
   </div>`;
@@ -330,7 +330,11 @@ function nodeHtml(n) {
     : '<span class="caret leaf">·</span>';
   const metrics = Object.entries(n.metrics || {})
     .map(([k, v]) => `<span class="tw-m">${esc(k)}=${esc(v)}</span>`).join(' ');
-  const more = n.missing ? `<span class="tw-more">+${n.missing} 안 펼침</span>` : '';
+  // 앱이 알려준 자식 수와 실제로 본 수의 차이. 앱이 세는 기준이 다를 수 있어
+  // 실제보다 크게 나올 수 있다 — 그래서 "안 펼침" 이 아니라 "아직 못 봄" 으로 적는다.
+  const more = n.missing
+    ? `<span class="tw-more" title="앱이 자식 ${n.expected}개라고 했는데 ${n.children.length}개만 봤습니다. 앱이 세는 기준이 다르면 실제보다 크게 나올 수 있습니다.">+${n.missing} 미관측</span>`
+    : '';
   const bad = n.depthMismatch
     ? `<span class="tw-more" style="color:var(--e);background:rgba(248,113,113,.12)">깊이 ${n.depth}≠${n.loggedDepth}</span>` : '';
   const sub = kids.length

@@ -242,5 +242,55 @@ class TestRealDeviceShape(unittest.TestCase):
         self.assertEqual(client["missing"], 4)
 
 
+class TestDeepTree(unittest.TestCase):
+    """6단계 실기기 표본 — 깊은 가지와 형제 분기 회귀 방지."""
+
+    SAMPLE = [
+        line("-", name="조직도", depth=0, subDept=7, users=0),
+        line("D1523", parent="-", name="CEO", depth=1, subDept=1, users=1),
+        line("D549", parent="D1523", name="연구소", depth=2, subDept=0, users=1),
+        line("D123", parent="-", name="솔루션_사업본부", depth=1, subDept=2, users=1),
+        line("D1532", parent="D123", name="개발팀", depth=2, subDept=2, users=1),
+        line("D538", parent="D1532", name="서버", depth=3, subDept=1, users=3),
+        line("D539", parent="D1532", name="클라이언트", depth=3, subDept=4, users=1),
+        line("D540", parent="D539", name="PC", depth=4, subDept=0, users=2),
+        line("D541", parent="D539", name="MOBILE", depth=4, subDept=2, users=1),
+        line("D561", parent="D541", name="AOS", depth=5, subDept=0, users=2),
+        line("D562", parent="D541", name="IOS", depth=5, subDept=0, users=2),
+        line("D1524", parent="-", name="영업팀", depth=1, subDept=0, users=3),
+    ]
+
+    def setUp(self):
+        self.t = build(self.SAMPLE)
+        self.by = {}
+        def walk(n):
+            self.by[n.get("name") or n["id"]] = n
+            for c in n["children"]:
+                walk(c)
+        for r in self.t["roots"]:
+            walk(r)
+
+    def test_6단계가_한_트리로_선다(self):
+        self.assertEqual(self.t["nodeCount"], 12)
+        self.assertEqual(self.t["rootCount"], 1)
+        self.assertEqual(self.t["maxDepth"], 5)
+        self.assertEqual(self.t["orphanCount"], 0)
+        self.assertEqual(self.t["depthMismatch"], 0)
+
+    def test_형제가_여러_깊이에서_갈라진다(self):
+        self.assertEqual([c["name"] for c in self.by["개발팀"]["children"]], ["서버", "클라이언트"])
+        self.assertEqual([c["name"] for c in self.by["클라이언트"]["children"]], ["PC", "MOBILE"])
+        self.assertEqual([c["name"] for c in self.by["MOBILE"]["children"]], ["AOS", "IOS"])
+
+    def test_안_펼친_개수가_맞는다(self):
+        self.assertEqual(self.by["조직도"]["missing"], 4)
+        self.assertEqual(self.by["서버"]["missing"], 1)
+        self.assertEqual(self.by["클라이언트"]["missing"], 2)
+
+    def test_말단은_안_펼친_게_없다(self):
+        for leaf in ("연구소", "PC", "AOS", "IOS", "영업팀"):
+            self.assertEqual(self.by[leaf]["missing"], 0, leaf)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
