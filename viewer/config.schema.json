@@ -244,6 +244,40 @@
           "depthField": {
             "type": "string",
             "description": "앱이 적어 준 깊이 필드(예: depth). 트리는 parent 로만 세우고 이건 검증에만 쓴다. 어긋나면 parent 가 잘못 들어오고 있다는 신호."
+          },
+          "scope": {
+            "type": "string",
+            "description": "최상위 컨테이너가 여럿일 때 서로 섞이지 않게 나누는 필드(예: orgId). 없으면 전부 한 묶음."
+          },
+          "leaf": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "말단에 붙는 다른 종류의 노드(예: 부서 아래의 사람). 같은 대상이 여러 부모에 나올 수 있어 부모+식별자를 키로 쓴다.",
+            "properties": {
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "node": {
+                "type": "string"
+              },
+              "parent": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "truncatedEvent": {
+                "type": "string",
+                "description": "수가 많아 일부를 로그에 안 남겼을 때의 이벤트"
+              },
+              "truncatedCount": {
+                "type": "string",
+                "description": "안 남긴 수가 든 필드"
+              }
+            }
           }
         }
       }

@@ -210,5 +210,8 @@ main{flex:1; display:flex; min-height:0}
 }
 .tnode .tw-hits{ color:var(--dim2); font-size:10px }
 .tnode.orphan .tw-id{ color:var(--w) }
+/* 사람 노드는 부서와 구분되게 */
+.tnode.person .tw-id{ color:var(--dim2); font-size:10.5px }
+.tnode.person .tw-name{ color:var(--d); font-weight:500 }
 .tkids{ margin-left:11px; padding-left:8px; border-left:1px solid var(--line) }
 .tkids.hidden{ display:none }

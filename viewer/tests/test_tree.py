@@ -22,18 +22,34 @@ CFG = Config.from_dict({
         "node": "dept", "parent": "parent", "name": "deptName",
         "metrics": ["subDept", "users"],
         "childCount": "subDept", "depthField": "depth",
+        "scope": "orgId",
+        "leaf": {"events": ["ORG_USER"], "node": "uid", "parent": "dept",
+                 "name": "name", "truncatedEvent": "ORG_USER_TRUNCATED",
+                 "truncatedCount": "skipped"},
     }],
 })
 TREE = CFG.trees[0]
 P = Parser("UC")
 
 
-def line(dept, parent="-", name=None, event="ORG_FETCH_OK", domain="MEMBER", **f):
-    parts = [f"evt={event}", f"dept={dept}", f"parent={parent}"]
+def line(dept, parent="-", name=None, event="ORG_FETCH_OK", domain="MEMBER",
+         org="ucware", **f):
+    parts = [f"evt={event}", f"orgId={org}", f"dept={dept}", f"parent={parent}"]
     if name:
         parts.append(f"deptName={name}")
     parts += [f"{k}={v}" for k, v in f.items()]
     return f"08-12 10:00:00.000  1  1 D UC_{domain}: " + " ".join(parts)
+
+
+def user(dept, uid, name, org="ucware"):
+    """부서 아래 사람 한 명."""
+    return (f"08-12 10:00:00.000  1  1 D UC_MEMBER: evt=ORG_USER "
+            f"orgId={org} dept={dept} uid={uid} name={name}")
+
+
+def truncated(dept, skipped, org="ucware"):
+    return (f"08-12 10:00:00.000  1  1 D UC_MEMBER: evt=ORG_USER_TRUNCATED "
+            f"orgId={org} dept={dept} shown=50 skipped={skipped}")
 
 
 def build(lines):
@@ -290,6 +306,75 @@ class TestDeepTree(unittest.TestCase):
     def test_말단은_안_펼친_게_없다(self):
         for leaf in ("연구소", "PC", "AOS", "IOS", "영업팀"):
             self.assertEqual(self.by[leaf]["missing"], 0, leaf)
+
+
+class TestScope(unittest.TestCase):
+    """최상위 컨테이너가 여럿일 때 서로 섞이면 안 된다."""
+
+    def test_컨테이너가_둘이면_트리도_둘이다(self):
+        t = build([
+            line("-", name="조직도", org="ucware", subDept=1),
+            line("D1", parent="-", name="CEO", org="ucware"),
+            line("-", name="협력사", org="partner", subDept=1),
+            line("P1", parent="-", name="협력사부서", org="partner"),
+        ])
+        self.assertEqual(t["scopeCount"], 2)
+        self.assertEqual(t["rootCount"], 2)
+        names = {r["name"] for r in t["roots"]}
+        self.assertEqual(names, {"조직도", "협력사"})
+
+    def test_남의_조직_부서가_섞이지_않는다(self):
+        t = build([
+            line("-", name="조직도", org="ucware", subDept=1),
+            line("D1", parent="-", name="CEO", org="ucware"),
+            line("-", name="협력사", org="partner", subDept=1),
+            line("P1", parent="-", name="협력사부서", org="partner"),
+        ])
+        ucware = next(r for r in t["roots"] if r["name"] == "조직도")
+        self.assertEqual([c["name"] for c in ucware["children"]], ["CEO"])
+
+    def test_같은_식별자라도_범위가_다르면_다른_노드다(self):
+        t = build([line("D1", name="우리부서", org="a"),
+                   line("D1", name="남의부서", org="b")])
+        self.assertEqual(t["nodeCount"], 2)
+
+
+class TestPeople(unittest.TestCase):
+    """부서 아래 사람을 말단 노드로."""
+
+    def test_사람이_부서_아래에_붙는다(self):
+        t = build([line("D1", name="개발팀", subDept=0),
+                   user("D1", "kim", "김"), user("D1", "lee", "이")])
+        dept = t["roots"][0]
+        self.assertEqual([c["name"] for c in dept["children"]], ["김", "이"])
+        self.assertTrue(all(c["kind"] == "leaf" for c in dept["children"]))
+
+    def test_같은_사람이_두_부서에_나와도_안_덮인다(self):
+        # 겸직이거나 상위 부서에도 소속으로 잡히는 경우. 실측에서 나왔다.
+        t = build([
+            line("D539", name="클라이언트", subDept=1),
+            line("D540", parent="D539", name="PC", subDept=0),
+            user("D539", "kim", "김"),
+            user("D540", "kim", "김"),
+        ])
+        client = t["roots"][0]
+        pc = next(c for c in client["children"] if c["kind"] == "node")
+        self.assertEqual(len([c for c in client["children"] if c["kind"] == "leaf"]), 1)
+        self.assertEqual(len([c for c in pc["children"] if c["kind"] == "leaf"]), 1)
+        self.assertEqual(t["nodeCount"], 4, "사람 둘이 각각 살아 있어야 한다")
+
+    def test_사람은_부서_수에_안_들어간다(self):
+        # subDept 는 부서만 센다. 사람이 자식에 섞여도 "미관측" 계산이 틀리면 안 된다.
+        t = build([line("D1", name="개발팀", subDept=2),
+                   line("D2", parent="D1", subDept=0),
+                   user("D1", "kim", "김")])
+        self.assertEqual(t["roots"][0]["missing"], 1)
+
+    def test_생략된_인원을_표시한다(self):
+        t = build([line("D1", name="개발팀", subDept=0),
+                   user("D1", "kim", "김"), truncated("D1", 7)])
+        self.assertEqual(t["roots"][0]["truncated"], 7)
+        self.assertEqual(t["truncatedTotal"], 7)
 
 
 if __name__ == "__main__":

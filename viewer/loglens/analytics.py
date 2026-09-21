@@ -150,55 +150,88 @@ def _funnel(records: List[Record], f) -> dict:
 
 # ── 계층 재구성 ──────────────────────────────────────────────────────────────
 
+ROOT_ID = "(root)"      # 식별자가 비어 있는 최상위 노드에 주는 예약 id
+_DEPTH_MAX = 64         # 서버 데이터가 서로를 가리켜도 멈추게 한다
+
+
 def build_tree(records: List[Record], cfg_tree) -> dict:
     """평평한 로그에서 계층을 되살린다.
 
     조직도처럼 "누르면 그 아래를 불러오는" 화면은 펼친 만큼만 로그가 남는다.
-    그래서 뷰어가 보는 것은 **언제나 부분 트리**다. 세 가지를 견뎌야 한다.
+    그래서 뷰어가 보는 것은 **언제나 부분 트리**다. 견뎌야 하는 것들:
 
-    1. **부모를 못 본 노드** — 사용자가 중간부터 펼쳤을 때. 버리지 않고 별도 뿌리로 올린다.
-    2. **같은 노드가 여러 번** — 접었다 펴면 또 찍힌다. 마지막 것으로 갱신하고 횟수를 센다.
-    3. **순환 참조** — 서버 데이터가 서로를 가리키면 깊이 계산이 멈추지 않는다. 상한을 둔다.
+    1. **부모를 못 본 노드** — 중간부터 펼쳤을 때. 버리지 않고 뿌리로 올린다.
+    2. **같은 노드가 여러 번** — 접었다 펴면 또 찍힌다. 마지막 값으로 갱신하고 횟수를 센다.
+    3. **순환 참조** — 깊이 상한을 둔다.
+    4. **최상위 컨테이너가 여럿** — 식별자가 비어 있는 루트가 둘이면 한 노드로 합쳐져
+       서로 다른 조직의 부서가 섞인다. `scope` 필드로 나눈다.
+    5. **말단에 다른 종류의 노드** — 부서 아래의 사람 같은 것. 같은 사람이 여러 부서에
+       나올 수 있으므로 **부모+식별자**를 키로 쓴다.
     """
-    nodes: Dict[str, dict] = {}
-    order: List[str] = []
+    scope_f = cfg_tree.scope
+    nodes: Dict[tuple, dict] = {}      # (scope, id) -> node
+    order: List[tuple] = []
+    truncated: Dict[tuple, int] = {}   # (scope, parent id) -> 로그에 안 남긴 수
+
+    def scope_of(r: Record) -> str:
+        return r.fields.get(scope_f, "") if scope_f else ""
+
+    def touch(key, ident, parent, name, kind):
+        n = nodes.get(key)
+        if n is None:
+            n = {"id": ident, "scope": key[0], "parent": parent, "name": name,
+                 "kind": kind, "metrics": {}, "hits": 0, "lastTs": None,
+                 "expected": None, "loggedDepth": None, "truncated": 0,
+                 "children": []}
+            nodes[key] = n
+            order.append(key)
+        n["hits"] += 1
+        if parent:
+            n["parent"] = parent
+        if name:
+            n["name"] = name
+        return n
 
     for r in records:
+        sc = scope_of(r)
+
+        if cfg_tree.truncated_matches(r):
+            pid = r.fields.get(cfg_tree.leaf.get("parent", "parent"))
+            cnt = r.fields.get(cfg_tree.leaf.get("truncatedCount", "skipped"))
+            try:
+                truncated[(sc, pid)] = truncated.get((sc, pid), 0) + int(cnt)
+            except (TypeError, ValueError):
+                pass
+            continue
+
+        if cfg_tree.leaf_matches(r):
+            leaf = cfg_tree.leaf
+            ident = r.fields.get(leaf.get("node", "id"))
+            pid = r.fields.get(leaf.get("parent", "parent"))
+            if not ident or not pid or pid == "-":
+                continue
+            # 같은 사람이 여러 부서에 나올 수 있다. 식별자 단독을 키로 쓰면
+            # 뒤에 온 것이 앞을 덮어 트리가 어긋난다. 부모까지 묶어서 키로 쓴다.
+            key = (sc, f"{pid}\u0000{ident}")
+            n = touch(key, ident, pid, r.fields.get(leaf.get("name", "")), "leaf")
+            n["lastTs"] = r.ts
+            continue
+
         if not cfg_tree.matches(r):
             continue
-        nid = r.fields.get(cfg_tree.node)
-        if not nid:
+        ident = r.fields.get(cfg_tree.node)
+        if not ident:
             continue
         # 최상위 노드는 식별자가 비어 있을 수 있다("-"). 버리면 "자식이 몇 개여야 하는지"
         # 같은 정보가 통째로 날아간다. 예약 id 를 주고 살린다.
-        if nid == "-":
-            nid = ROOT_ID
+        if ident == "-":
+            ident = ROOT_ID
         pid = r.fields.get(cfg_tree.parent)
-        if pid == "-" or pid == nid:
+        if pid == "-" or pid == ident:
             pid = None
 
-        n = nodes.get(nid)
-        if n is None:
-            n = {
-                "id": nid,
-                "parent": pid,
-                "name": r.fields.get(cfg_tree.name) if cfg_tree.name else None,
-                "metrics": {},
-                "hits": 0,
-                "lastTs": None,
-                "expected": None,     # 앱이 알려준 자식 수
-                "loggedDepth": None,  # 앱이 적어 준 깊이 (검증용)
-                "children": [],
-            }
-            nodes[nid] = n
-            order.append(nid)
-        # 접었다 펴면 또 찍힌다. 마지막 값으로 갱신하되 횟수는 누적한다.
-        n["hits"] += 1
+        n = touch((sc, ident), ident, pid, r.fields.get(cfg_tree.name) if cfg_tree.name else None, "node")
         n["lastTs"] = r.ts
-        if pid:
-            n["parent"] = pid
-        if cfg_tree.name and r.fields.get(cfg_tree.name):
-            n["name"] = r.fields[cfg_tree.name]
         for m in cfg_tree.metrics:
             if m in r.fields:
                 n["metrics"][m] = r.fields[m]
@@ -213,12 +246,18 @@ def build_tree(records: List[Record], cfg_tree) -> dict:
             except ValueError:
                 pass
 
-    # 부모-자식 잇기. 부모를 못 본 노드는 뿌리로 올린다.
+    for (sc, pid), cnt in truncated.items():
+        holder = nodes.get((sc, pid))
+        if holder is not None:
+            holder["truncated"] = cnt
+
+    # 부모-자식 잇기. 같은 scope 안에서만 잇는다.
     roots: List[dict] = []
     orphans = 0
-    for nid in order:
-        n = nodes[nid]
-        p = nodes.get(n["parent"]) if n["parent"] else None
+    for key in order:
+        sc, _ = key
+        n = nodes[key]
+        p = nodes.get((sc, n["parent"])) if n["parent"] else None
         if p is not None and p is not n:
             p["children"].append(n)
         else:
@@ -227,44 +266,52 @@ def build_tree(records: List[Record], cfg_tree) -> dict:
                 orphans += 1
             roots.append(n)
 
-    # 최상위 노드를 봤다면, 부모 없는 나머지는 전부 그 아래로 모은다.
+    # 최상위 노드를 봤다면, 같은 scope 에서 부모 없는 나머지를 그 아래로 모은다.
     # `parent=-` 는 "부모 없음"이 아니라 "최상위의 자식"이라는 뜻이기 때문이다.
-    root_node = nodes.get(ROOT_ID)
-    if root_node is not None and len(roots) > 1:
-        adopted = [n for n in roots if n is not root_node and not n.get("orphan")]
-        root_node["children"] = adopted + root_node["children"]
-        roots = [root_node] + [n for n in roots if n is not root_node and n.get("orphan")]
+    final_roots: List[dict] = []
+    by_scope: Dict[str, List[dict]] = {}
+    for n in roots:
+        by_scope.setdefault(n["scope"], []).append(n)
+    for sc, group in by_scope.items():
+        container = nodes.get((sc, ROOT_ID))
+        if container is not None and len(group) > 1:
+            adopted = [n for n in group if n is not container and not n.get("orphan")]
+            container["children"] = adopted + container["children"]
+            final_roots.append(container)
+            final_roots += [n for n in group if n is not container and n.get("orphan")]
+        else:
+            final_roots += group
 
-    _assign_depth(roots)
+    _assign_depth(final_roots)
 
     # depth 는 parent 와 중복 정보다. 트리는 parent 로만 세우고, depth 는 **검증**에 쓴다.
     # 어긋나면 parent 필드가 잘못 들어오고 있다는 신호다 (실제로 한 번 겪었다).
     depth_mismatch = 0
     if cfg_tree.depth_field:
         for n in nodes.values():
-            if n.get("loggedDepth") is not None and n["loggedDepth"] != n.get("depth"):
+            if n["loggedDepth"] is not None and n["loggedDepth"] != n.get("depth"):
                 n["depthMismatch"] = True
                 depth_mismatch += 1
 
-    # 앱이 "자식 N개" 라고 했는데 그중 몇 개만 봤는지. 어디를 더 펼쳐야 하는지 알려준다.
+    # 앱이 "자식 N개" 라고 한 것과 실제로 본 수의 차이.
+    # 사람 노드는 부서 수에 안 들어가므로 빼고 센다.
     for n in nodes.values():
-        n["missing"] = (max(0, n["expected"] - len(n["children"]))
-                        if n["expected"] is not None else None)
+        kids = sum(1 for c in n["children"] if c["kind"] == "node")
+        n["missing"] = max(0, n["expected"] - kids) if n["expected"] is not None else None
+
     return {
         "id": cfg_tree.id,
         "label": cfg_tree.label,
-        "roots": roots,
+        "roots": final_roots,
         "nodeCount": len(nodes),
-        "rootCount": len(roots),
+        "rootCount": len(final_roots),
         "orphanCount": orphans,
-        "maxDepth": max((_max_depth(r) for r in roots), default=0),
+        "scopeCount": len(by_scope),
+        "maxDepth": max((_max_depth(r) for r in final_roots), default=0),
         "missingTotal": sum(n["missing"] or 0 for n in nodes.values()),
+        "truncatedTotal": sum(n["truncated"] for n in nodes.values()),
         "depthMismatch": depth_mismatch,
     }
-
-
-ROOT_ID = "(root)"      # 식별자가 비어 있는 최상위 노드에 주는 예약 id
-_DEPTH_MAX = 64     # 서버 데이터가 서로를 가리켜도 멈추게 한다
 
 
 def _assign_depth(roots: List[dict]) -> None:

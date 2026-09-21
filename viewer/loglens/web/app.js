@@ -305,7 +305,9 @@ function renderTree(cfgTree) {
     <span>노드 <b>${t.nodeCount}</b></span>
     <span>뿌리 <b>${t.rootCount}</b></span>
     <span>최대 깊이 <b>${t.maxDepth}</b></span>
+    ${t.scopeCount > 1 ? `<span>조직 <b>${t.scopeCount}</b></span>` : ''}
     ${t.missingTotal ? `<span class="warn" title="앱이 알려준 자식 수와 실제로 본 수의 차이입니다. 앱이 세는 기준이 다르면 실제보다 크게 나올 수 있습니다.">아직 못 본 자식 <b>${t.missingTotal}</b></span>` : ''}
+    ${t.truncatedTotal ? `<span class="warn" title="인원이 많아 로그에 남기지 않은 수입니다.">로그에 없는 인원 <b>${t.truncatedTotal}</b></span>` : ''}
     ${t.orphanCount ? `<span class="warn">부모 못 찾음 <b>${t.orphanCount}</b></span>` : ''}
     ${t.depthMismatch ? `<span class="warn" title="parent 로 세운 깊이가 앱이 적어 준 depth 와 다릅니다. parent 필드를 확인하세요.">깊이 불일치 <b>${t.depthMismatch}</b></span>` : ''}
     <span class="tacts">
@@ -319,7 +321,9 @@ function renderTree(cfgTree) {
   for (const b of el.querySelectorAll('.tact')) {
     b.onclick = () => {
       if (b.dataset.all === 'close') {
-        forEachNode(t.roots, (n) => { if (n.children.length) state.collapsed.add(n.id); });
+        forEachNode(t.roots, (n) => {
+          if (n.children.length) state.collapsed.add(`${n.scope || ''}\u0000${n.id}`);
+        });
       } else {
         state.collapsed.clear();
       }
@@ -330,8 +334,8 @@ function renderTree(cfgTree) {
   // 줄 아무 데나 누르면 그 자리에서 펼쳐지고 접힌다. 파일 탐색기와 같은 동작이다.
   for (const n of el.querySelectorAll('.tnode')) {
     n.onclick = () => {
-      const id = n.dataset.id;
-      state.collapsed.has(id) ? state.collapsed.delete(id) : state.collapsed.add(id);
+      const k = n.dataset.key;
+      state.collapsed.has(k) ? state.collapsed.delete(k) : state.collapsed.add(k);
       state.dirty = true;
     };
   }
@@ -343,7 +347,9 @@ function forEachNode(nodes, fn) {
 
 function nodeHtml(n) {
   const kids = n.children || [];
-  const isCollapsed = state.collapsed.has(n.id);
+  // 같은 식별자가 다른 조직에 있을 수 있다. 접힘 상태도 조직까지 묶어서 기억한다.
+  const key = `${n.scope || ''}\u0000${n.id}`;
+  const isCollapsed = state.collapsed.has(key);
   const tog = kids.length
     ? `<span class="tog" aria-hidden="true">${isCollapsed ? '+' : '\u2212'}</span>`
     : '<span class="tog leaf" aria-hidden="true">·</span>';
@@ -356,13 +362,16 @@ function nodeHtml(n) {
     : '';
   const bad = n.depthMismatch
     ? `<span class="tw-more" style="color:var(--e);background:rgba(248,113,113,.12)">깊이 ${n.depth}≠${n.loggedDepth}</span>` : '';
+  const cut = n.truncated
+    ? `<span class="tw-more" title="인원이 많아 ${n.truncated}명은 로그에 남지 않았습니다.">${n.truncated}명 미기록</span>` : '';
   const sub = kids.length
     ? `<div class="tkids${isCollapsed ? ' hidden' : ''}">${kids.map(nodeHtml).join('')}</div>` : '';
-  return `<div class="tnode${n.orphan ? ' orphan' : ''}" data-id="${esc(n.id)}"
+  const isLeaf = n.kind === 'leaf';
+  return `<div class="tnode${n.orphan ? ' orphan' : ''}${isLeaf ? ' person' : ''}" data-key="${esc(key)}"
       title="${n.orphan ? '부모 줄을 아직 못 봤습니다' : ''}">
       ${tog}<span class="tw-id">${esc(n.id)}</span>
       ${n.name ? `<span class="tw-name">${esc(n.name)}</span>` : ''}
-      ${metrics}${more}${bad}
+      ${metrics}${more}${cut}${bad}
       ${n.hits > 1 ? `<span class="tw-hits">×${n.hits}</span>` : ''}
     </div>${sub}`;
 }

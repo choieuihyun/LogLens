@@ -142,6 +142,23 @@ class Tree:
     # 앱이 적어 준 깊이 필드 (예: depth). 트리는 parent 로만 세우고, 이건 검증에만 쓴다.
     # 재구성한 깊이와 어긋나면 parent 가 잘못 들어오고 있다는 신호다.
     depth_field: Optional[str] = None
+    # 최상위 컨테이너가 여럿일 때 서로 섞이지 않게 나누는 필드 (예: orgId).
+    # 없으면 전부 한 묶음으로 본다.
+    scope: Optional[str] = None
+    # 말단에 붙는 다른 종류의 노드 (예: 부서 아래의 사람).
+    # {"events": [...], "node": "uid", "parent": "dept", "name": "name",
+    #  "truncatedEvent": "...", "truncatedCount": "skipped"}
+    leaf: Dict[str, object] = field(default_factory=dict)
+
+    def leaf_matches(self, rec: Record) -> bool:
+        evs = self.leaf.get("events") or []
+        return (bool(evs) and rec.kind == STRUCTURED
+                and rec.domain == self.domain and rec.event in evs)
+
+    def truncated_matches(self, rec: Record) -> bool:
+        ev = self.leaf.get("truncatedEvent")
+        return (bool(ev) and rec.kind == STRUCTURED
+                and rec.domain == self.domain and rec.event == ev)
 
     def matches(self, rec: Record) -> bool:
         if rec.kind != STRUCTURED or rec.domain != self.domain:
@@ -152,7 +169,8 @@ class Tree:
         return {"id": self.id, "label": self.label, "domain": self.domain,
                 "events": self.events, "node": self.node, "parent": self.parent,
                 "name": self.name, "metrics": self.metrics,
-                "childCount": self.child_count, "depthField": self.depth_field}
+                "childCount": self.child_count, "depthField": self.depth_field,
+                "scope": self.scope, "leaf": self.leaf}
 
 
 @dataclass
@@ -215,7 +233,8 @@ class Config:
                         node=x.get("node", "id"), parent=x.get("parent", "parent"),
                         name=x.get("name"), metrics=x.get("metrics", []),
                         child_count=x.get("childCount"),
-                        depth_field=x.get("depthField"))
+                        depth_field=x.get("depthField"),
+                        scope=x.get("scope"), leaf=x.get("leaf", {}))
                    for x in d.get("trees", [])],
             outcome=Outcome(**{
                 "success": d.get("outcome", {}).get("success", Outcome().success),
