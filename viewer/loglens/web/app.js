@@ -28,7 +28,6 @@ const state = {
   paused: false,
   autoscroll: true,
   issueFilter: null,      // {ruleId, key}
-  view: 'tree',           // 트리가 있는 탭에서 '트리' | '로그'
   collapsed: new Set(),   // 접어 둔 노드 id
   treeData: null,
   dirty: true,
@@ -123,11 +122,7 @@ function buildTabs() {
     d.className = 'tab' + (t.id === state.tab ? ' on' : '');
     d.dataset.id = t.id;
     d.innerHTML = `${esc(t.label)}<span class="n" data-n="${esc(t.id)}">0</span>`;
-    d.onclick = () => {
-      state.tab = t.id;
-      state.view = treeOfTab(t.id) ? 'tree' : 'log';
-      buildTabs(); state.dirty = true;
-    };
+    d.onclick = () => { state.tab = t.id; buildTabs(); state.dirty = true; };
     el.appendChild(d);
   }
 }
@@ -169,9 +164,6 @@ function wire() {
     state.dirty = true;
   };
   $('btnDash').onclick = openDash;
-  for (const b of document.querySelectorAll('.vbtn')) {
-    b.onclick = () => { state.view = b.dataset.v; state.dirty = true; };
-  }
   $('dashClose').onclick = () => { $('dash').hidden = true; };
   // 사용자가 위로 스크롤하면 자동스크롤을 끈다 (읽는 중에 끌려가지 않게)
   $('logs').addEventListener('scroll', () => {
@@ -269,17 +261,10 @@ function render() {
   $('cShown').textContent = shown.length;
   $('cTotal').textContent = state.records.length;
 
-  // 계층 규칙이 붙은 탭이면 트리/로그를 고를 수 있다.
+  // 계층 규칙이 붙은 탭이면 트리를 로그 **옆에** 같이 띄운다. 둘 중 하나를 고르는 게 아니다.
   const tree = treeOfTab(state.tab);
-  $('viewSw').hidden = !tree;
-  for (const b of document.querySelectorAll('.vbtn')) {
-    b.classList.toggle('on', b.dataset.v === state.view);
-  }
-  const showTree = !!tree && state.view === 'tree';
-  $('treePane').hidden = !showTree;
-  $('logs').hidden = showTree;
-
-  if (showTree) { renderTree(tree); return; }
+  $('treePane').hidden = !tree;
+  if (tree) renderTree(tree);
 
   const slice = shown.slice(-MAX_RENDER);
   const logs = $('logs');
@@ -310,6 +295,7 @@ async function refreshTree() {
 function renderTree(cfgTree) {
   const t = state.treeData && state.treeData[cfgTree.id];
   const el = $('treePane');
+  const keepScroll = el.scrollTop;
   if (!t) { el.innerHTML = '<p class="empty">세우는 중…</p>'; return; }
   if (!t.nodeCount) {
     el.innerHTML = '<p class="empty">아직 계층 로그가 없습니다. 앱에서 해당 화면을 펼쳐 보세요.</p>';
@@ -324,19 +310,13 @@ function renderTree(cfgTree) {
     ${t.depthMismatch ? `<span class="warn" title="parent 로 세운 깊이가 앱이 적어 준 depth 와 다릅니다. parent 필드를 확인하세요.">깊이 불일치 <b>${t.depthMismatch}</b></span>` : ''}
   </div>`;
   el.innerHTML = sum + t.roots.map(nodeHtml).join('');
+  el.scrollTop = keepScroll;      // 주기적 갱신 때 읽던 자리를 잃지 않게
 
+  // 줄 아무 데나 누르면 그 자리에서 펼쳐지고 접힌다. 파일 탐색기와 같은 동작이다.
   for (const n of el.querySelectorAll('.tnode')) {
-    n.onclick = (ev) => {
+    n.onclick = () => {
       const id = n.dataset.id;
-      // 화살표를 누르면 접기/펼치기, 노드 본문을 누르면 그 노드 로그만 보기
-      if (ev.target.classList.contains('caret')) {
-        state.collapsed.has(id) ? state.collapsed.delete(id) : state.collapsed.add(id);
-      } else {
-        $('q').value = id;
-        state.q = id;
-        compileQuery();
-        state.view = 'log';
-      }
+      state.collapsed.has(id) ? state.collapsed.delete(id) : state.collapsed.add(id);
       state.dirty = true;
     };
   }
@@ -356,7 +336,7 @@ function nodeHtml(n) {
   const sub = kids.length
     ? `<div class="tkids${isCollapsed ? ' hidden' : ''}">${kids.map(nodeHtml).join('')}</div>` : '';
   return `<div class="tnode${n.orphan ? ' orphan' : ''}" data-id="${esc(n.id)}"
-      title="${n.orphan ? '부모 줄을 아직 못 봤습니다 · ' : ''}클릭하면 이 노드 로그만 봅니다">
+      title="${n.orphan ? '부모 줄을 아직 못 봤습니다' : ''}">
       ${caret}<span class="tw-id">${esc(n.id)}</span>
       ${n.name ? `<span class="tw-name">${esc(n.name)}</span>` : ''}
       ${metrics}${more}${bad}

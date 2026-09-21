@@ -28,14 +28,11 @@
   <label class="chk"><input type="checkbox" id="onlyStruct"> 구조화만</label>
   <label class="chk" id="pidWrap" hidden><input type="checkbox" id="onlyPid"> <span id="pidLabel">이 앱만</span></label>
   <label class="chk"><input type="checkbox" id="autoscroll" checked> 자동스크롤</label>
-  <div class="viewsw" id="viewSw" hidden>
-    <button class="vbtn on" data-v="tree">트리</button><button class="vbtn" data-v="log">로그</button>
-  </div>
 </div>
 
 <main>
+  <section class="tree-pane" id="treePane" hidden></section>
   <section class="logs" id="logs"></section>
-  <section class="logs tree-pane" id="treePane" hidden></section>
   <aside class="tray">
     <h2>이슈 트레이 <span class="hint">자동 그룹핑</span></h2>
     <div id="tray"><p class="empty">아직 이슈 없음</p></div>
