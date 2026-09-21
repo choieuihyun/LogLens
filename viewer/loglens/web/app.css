@@ -177,8 +177,30 @@ main{flex:1; display:flex; min-height:0}
   border-radius:4px; cursor:pointer; white-space:nowrap;
 }
 .tnode:hover{ background:var(--bg3) }
-.tnode .caret{ flex:0 0 11px; color:var(--dim2); font-size:9px; text-align:center; user-select:none }
-.tnode .caret.leaf{ color:transparent }
+/* 펼침/접힘 버튼. 자식이 있는 노드만 실제 버튼처럼 보인다. */
+.tnode .tog{
+  flex:0 0 15px; width:15px; height:15px;
+  display:inline-flex; align-items:center; justify-content:center;
+  border:1px solid var(--line); border-radius:3px;
+  background:var(--bg3); color:var(--dim);
+  font-size:11px; line-height:1; font-weight:700;
+  user-select:none; transition:border-color .12s, color .12s, background .12s;
+}
+.tnode:hover .tog{ border-color:var(--accent); color:var(--accent); background:var(--bg2) }
+.tnode .tog.leaf{
+  border-color:transparent; background:transparent;
+  color:var(--dim2); font-weight:400; font-size:9px;
+}
+.tnode:hover .tog.leaf{ border-color:transparent; background:transparent; color:var(--dim2) }
+
+/* 트리 창 머리의 모두 펼치기/접기 */
+.tacts{ display:flex; gap:5px; margin-left:auto }
+.tact{
+  background:var(--bg3); color:var(--dim); border:1px solid var(--line);
+  border-radius:4px; padding:2px 8px; font-size:10.5px; cursor:pointer;
+  font-family:inherit;
+}
+.tact:hover{ border-color:var(--accent); color:var(--fg) }
 .tnode .tw-id{ color:var(--accent); flex:0 0 auto; font-size:11px }
 .tnode .tw-name{ color:var(--fg); font-weight:600 }
 .tnode .tw-m{ color:var(--dim); font-size:10.5px }

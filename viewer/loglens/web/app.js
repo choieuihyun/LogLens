@@ -308,9 +308,24 @@ function renderTree(cfgTree) {
     ${t.missingTotal ? `<span class="warn" title="앱이 알려준 자식 수와 실제로 본 수의 차이입니다. 앱이 세는 기준이 다르면 실제보다 크게 나올 수 있습니다.">아직 못 본 자식 <b>${t.missingTotal}</b></span>` : ''}
     ${t.orphanCount ? `<span class="warn">부모 못 찾음 <b>${t.orphanCount}</b></span>` : ''}
     ${t.depthMismatch ? `<span class="warn" title="parent 로 세운 깊이가 앱이 적어 준 depth 와 다릅니다. parent 필드를 확인하세요.">깊이 불일치 <b>${t.depthMismatch}</b></span>` : ''}
+    <span class="tacts">
+      <button class="tact" data-all="open">모두 펼치기</button>
+      <button class="tact" data-all="close">모두 접기</button>
+    </span>
   </div>`;
   el.innerHTML = sum + t.roots.map(nodeHtml).join('');
   el.scrollTop = keepScroll;      // 주기적 갱신 때 읽던 자리를 잃지 않게
+
+  for (const b of el.querySelectorAll('.tact')) {
+    b.onclick = () => {
+      if (b.dataset.all === 'close') {
+        forEachNode(t.roots, (n) => { if (n.children.length) state.collapsed.add(n.id); });
+      } else {
+        state.collapsed.clear();
+      }
+      state.dirty = true;
+    };
+  }
 
   // 줄 아무 데나 누르면 그 자리에서 펼쳐지고 접힌다. 파일 탐색기와 같은 동작이다.
   for (const n of el.querySelectorAll('.tnode')) {
@@ -322,12 +337,16 @@ function renderTree(cfgTree) {
   }
 }
 
+function forEachNode(nodes, fn) {
+  for (const n of nodes) { fn(n); forEachNode(n.children || [], fn); }
+}
+
 function nodeHtml(n) {
   const kids = n.children || [];
   const isCollapsed = state.collapsed.has(n.id);
-  const caret = kids.length
-    ? `<span class="caret">${isCollapsed ? '▸' : '▾'}</span>`
-    : '<span class="caret leaf">·</span>';
+  const tog = kids.length
+    ? `<span class="tog" aria-hidden="true">${isCollapsed ? '+' : '\u2212'}</span>`
+    : '<span class="tog leaf" aria-hidden="true">·</span>';
   const metrics = Object.entries(n.metrics || {})
     .map(([k, v]) => `<span class="tw-m">${esc(k)}=${esc(v)}</span>`).join(' ');
   // 앱이 알려준 자식 수와 실제로 본 수의 차이. 앱이 세는 기준이 다를 수 있어
@@ -341,7 +360,7 @@ function nodeHtml(n) {
     ? `<div class="tkids${isCollapsed ? ' hidden' : ''}">${kids.map(nodeHtml).join('')}</div>` : '';
   return `<div class="tnode${n.orphan ? ' orphan' : ''}" data-id="${esc(n.id)}"
       title="${n.orphan ? '부모 줄을 아직 못 봤습니다' : ''}">
-      ${caret}<span class="tw-id">${esc(n.id)}</span>
+      ${tog}<span class="tw-id">${esc(n.id)}</span>
       ${n.name ? `<span class="tw-name">${esc(n.name)}</span>` : ''}
       ${metrics}${more}${bad}
       ${n.hits > 1 ? `<span class="tw-hits">×${n.hits}</span>` : ''}
