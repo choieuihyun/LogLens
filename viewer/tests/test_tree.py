@@ -49,8 +49,10 @@ def user(dept, uid, name, org="ucware"):
 
 
 def truncated(dept, skipped, org="ucware"):
-    return (f"08-12 10:00:00.000  1  1 D UC_MEMBER: evt=ORG_USER_TRUNCATED "
-            f"orgId={org} dept={dept} shown=50 skipped={skipped}")
+    """생략된 인원 수. org=None 이면 범위 필드가 아예 없는 줄."""
+    head = "evt=ORG_USER_TRUNCATED" + (f" orgId={org}" if org else "")
+    return (f"08-12 10:00:00.000  1  1 D UC_MEMBER: {head} "
+            f"dept={dept} shown=50 skipped={skipped}")
 
 
 def build(lines):
@@ -394,6 +396,33 @@ class TestPeople(unittest.TestCase):
         ])
         person = next(r for r in t["roots"] if r["kind"] == "leaf")
         self.assertTrue(person.get("orphan"))
+
+    def test_범위_필드가_있으면_두_조직에_같은_부서코드가_있어도_제대로_붙는다(self):
+        # 앱이 사람 줄에도 orgId 를 달아 준 뒤의 정상 경로. 위의 보정은 발동하지 않는다
+        # (부모가 두 조직에 있어 애매하므로). 범위가 적혀 있으니 애매할 일이 없다.
+        t = build([
+            line("D1", name="우리부서", org="a", subDept=0),
+            line("D1", name="남의부서", org="b", subDept=0),
+            user("D1", "u1", "우리사람", org="a"),
+            user("D1", "u2", "남의사람", org="b"),
+        ])
+        self.assertEqual(t["orphanCount"], 0)
+        by_org = {r["scope"]: r for r in t["roots"]}
+        self.assertEqual([c["name"] for c in by_org["a"]["children"]], ["우리사람"])
+        self.assertEqual([c["name"] for c in by_org["b"]["children"]], ["남의사람"])
+
+    def test_범위_필드가_없는_생략_줄도_같이_옮겨진다(self):
+        # 사람 노드만 옮기고 생략 수를 두고 가면 "+N 생략" 이 조용히 사라진다.
+        # 구버전 빌드 로그를 열 때 실제로 이렇게 된다.
+        t = build([
+            line("-", name="조직도", subDept=1),
+            line("D1", parent="-", name="개발팀", subDept=0),
+            user("D1", "u1", "사람1", org=None),
+            truncated("D1", 7, org=None),
+        ])
+        dept = t["roots"][0]["children"][0]
+        self.assertEqual(dept["truncated"], 7)
+        self.assertEqual(t["truncatedTotal"], 7)
 
     def test_생략된_인원을_표시한다(self):
         t = build([line("D1", name="개발팀", subDept=0),

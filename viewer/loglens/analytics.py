@@ -246,23 +246,32 @@ def build_tree(records: List[Record], cfg_tree) -> dict:
             except ValueError:
                 pass
 
-    # 범위 필드가 없는 줄이 섞일 수 있다(예: 사람 줄에 orgId 가 안 붙는 경우).
-    # 그대로 두면 빈 범위에 갇혀 부모를 못 찾는다. 부모가 다른 범위에 **유일하게**
-    # 있으면 그 범위로 옮긴다. 여러 범위에 있으면 애매하므로 건드리지 않는다.
+    # 범위 필드가 없는 줄이 섞일 수 있다. 그대로 두면 빈 범위에 갇혀 부모를 못 찾는다.
+    # 부모가 다른 범위에 **유일하게** 있으면 그 범위로 옮긴다. 여러 범위에 있으면
+    # 애매하므로 건드리지 않는다 — 잘못 붙이는 것보다 고아로 두는 게 낫다.
+    #
+    # 앱이 사람 줄에도 범위를 달아 주면 이 보정은 발동하지 않는다. 그래도 남겨 둔다.
+    # 범위 필드가 없던 시절 빌드로 뽑은 로그를 열 때 필요하다.
     if scope_f:
         scopes_of_id: Dict[str, set] = {}
         for (sc, ident), n in nodes.items():
             if n["kind"] == "node":
                 scopes_of_id.setdefault(n["id"], set()).add(sc)
+
+        def unique_scope(ident: str):
+            """이 식별자가 딱 한 범위에만 있으면 그 범위. 애매하면 None."""
+            cands = scopes_of_id.get(ident, set()) - {""}
+            return next(iter(cands)) if len(cands) == 1 else None
+
         moved = []
         for key in list(nodes):
             sc, ident = key
             n = nodes[key]
             if sc or not n["parent"]:
                 continue
-            cands = scopes_of_id.get(n["parent"], set()) - {""}
-            if len(cands) == 1:
-                moved.append((key, (next(iter(cands)), ident)))
+            target = unique_scope(n["parent"])
+            if target:
+                moved.append((key, (target, ident)))
         for old, new in moved:
             if new in nodes:          # 이미 같은 자리에 있으면 합치지 않는다
                 continue
@@ -270,6 +279,16 @@ def build_tree(records: List[Record], cfg_tree) -> dict:
             n["scope"] = new[0]
             nodes[new] = n
             order[order.index(old)] = new
+
+        # 생략 인원 수도 같이 옮긴다. 노드만 옮기면 아래 붙이기에서 부모를 못 찾아
+        # "+N 생략" 이 조용히 사라진다.
+        for key in list(truncated):
+            sc, pid = key
+            if sc:
+                continue
+            target = unique_scope(pid)
+            if target:
+                truncated[(target, pid)] = truncated.get((target, pid), 0) + truncated.pop(key)
 
     for (sc, pid), cnt in truncated.items():
         holder = nodes.get((sc, pid))
