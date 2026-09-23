@@ -30,6 +30,8 @@ const state = {
   issueFilter: null,      // {ruleId, key}
   collapsed: new Set(),   // 접어 둔 노드 id
   treeData: null,
+  treeRaw: null,          // 마지막으로 받은 /api/tree 원문. 바뀔 때만 다시 그린다
+  treeDirty: true,
   dirty: true,
 };
 
@@ -51,6 +53,8 @@ async function boot() {
   connect();
   setInterval(render, 100);
   setInterval(pollIssues, 1500);
+  // 줄이 다시 만들어져도 살아남도록 창에 한 번만 건다.
+  $('treePane').addEventListener('click', onTreeClick);
   refreshTree();
   setInterval(refreshTree, 2500);
 }
@@ -122,7 +126,7 @@ function buildTabs() {
     d.className = 'tab' + (t.id === state.tab ? ' on' : '');
     d.dataset.id = t.id;
     d.innerHTML = `${esc(t.label)}<span class="n" data-n="${esc(t.id)}">0</span>`;
-    d.onclick = () => { state.tab = t.id; buildTabs(); state.dirty = true; };
+    d.onclick = () => { state.tab = t.id; buildTabs(); state.treeDirty = true; state.dirty = true; };
     el.appendChild(d);
   }
 }
@@ -264,7 +268,8 @@ function render() {
   // 계층 규칙이 붙은 탭이면 트리를 로그 **옆에** 같이 띄운다. 둘 중 하나를 고르는 게 아니다.
   const tree = treeOfTab(state.tab);
   $('treePane').hidden = !tree;
-  if (tree) renderTree(tree);
+  // 로그가 들어올 때마다 트리까지 다시 그리면 안 된다. 트리 내용이 바뀐 경우만.
+  if (tree && state.treeDirty) { renderTree(tree); state.treeDirty = false; }
 
   const slice = shown.slice(-MAX_RENDER);
   const logs = $('logs');
@@ -285,9 +290,14 @@ function treeOfTab(tabId) {
 
 async function refreshTree() {
   try {
-    const all = await (await fetch('/api/tree')).json();
+    // 원문 그대로 비교한다. 같으면 다시 그릴 이유가 없다 —
+    // 괜히 다시 그리면 그 순간 누르고 있던 클릭이 취소된다(아래 toggleNode 주석 참고).
+    const txt = await (await fetch('/api/tree')).text();
+    if (txt === state.treeRaw) return;
+    state.treeRaw = txt;
     state.treeData = {};
-    for (const t of all) state.treeData[t.id] = t;
+    for (const t of JSON.parse(txt)) state.treeData[t.id] = t;
+    state.treeDirty = true;
     if (treeOfTab(state.tab)) state.dirty = true;
   } catch (_) {}
 }
@@ -295,12 +305,12 @@ async function refreshTree() {
 function renderTree(cfgTree) {
   const t = state.treeData && state.treeData[cfgTree.id];
   const el = $('treePane');
-  const keepScroll = el.scrollTop;
   if (!t) { el.innerHTML = '<p class="empty">세우는 중…</p>'; return; }
   if (!t.nodeCount) {
     el.innerHTML = '<p class="empty">아직 계층 로그가 없습니다. 앱에서 해당 화면을 펼쳐 보세요.</p>';
     return;
   }
+  const keepScroll = el.scrollTop;
   const sum = `<div class="tsum">
     <span>노드 <b>${t.nodeCount}</b></span>
     <span>뿌리 <b>${t.rootCount}</b></span>
@@ -317,32 +327,41 @@ function renderTree(cfgTree) {
   </div>`;
   el.innerHTML = sum + t.roots.map(nodeHtml).join('');
   el.scrollTop = keepScroll;      // 주기적 갱신 때 읽던 자리를 잃지 않게
-
-  for (const b of el.querySelectorAll('.tact')) {
-    b.onclick = () => {
-      if (b.dataset.all === 'close') {
-        forEachNode(t.roots, (n) => {
-          if (n.children.length) state.collapsed.add(`${n.scope || ''}\u0000${n.id}`);
-        });
-      } else {
-        state.collapsed.clear();
-      }
-      state.dirty = true;
-    };
-  }
-
-  // 줄 아무 데나 누르면 그 자리에서 펼쳐지고 접힌다. 파일 탐색기와 같은 동작이다.
-  for (const n of el.querySelectorAll('.tnode')) {
-    n.onclick = () => {
-      const k = n.dataset.key;
-      state.collapsed.has(k) ? state.collapsed.delete(k) : state.collapsed.add(k);
-      state.dirty = true;
-    };
-  }
 }
 
-function forEachNode(nodes, fn) {
-  for (const n of nodes) { fn(n); forEachNode(n.children || [], fn); }
+/* 접기/펼치기는 **DOM 을 직접 건드린다.** 다시 그려서는 안 된다.
+
+   브라우저는 누른 곳과 뗀 곳이 같은 요소일 때만 click 을 발생시킨다.
+   예전에는 이 트리를 통째로 innerHTML 로 다시 만들었는데, adb 로 로그가
+   들어올 때마다 그게 일어났다. 누르는 0.1초 사이에 요소가 새것으로 갈리면
+   브라우저는 클릭을 아예 취소한다 — 그래서 "터치가 씹히는" 것처럼 보였다.
+   작은 +/- 가 특히 심했던 건 그걸 제일 자주 누르기 때문이다. */
+function onTreeClick(e) {
+  const act = e.target.closest('.tact');
+  if (act) { setAllCollapsed(act.dataset.all === 'close'); return; }
+  const row = e.target.closest('.tnode');
+  if (row) toggleNode(row);
+}
+
+function toggleNode(row) {
+  // 자식 묶음은 줄의 형제다 (nodeHtml 이 그렇게 만든다). 자식이 없으면 접을 것도 없다.
+  const kids = row.nextElementSibling;
+  if (!kids || !kids.classList.contains('tkids')) return;
+  const collapse = !kids.classList.contains('hidden');
+  kids.classList.toggle('hidden', collapse);
+  const tog = row.querySelector('.tog');
+  if (tog) tog.textContent = collapse ? '+' : '\u2212';
+  // 다시 그릴 때 이 상태를 되살리기 위해 기억만 해 둔다.
+  collapse ? state.collapsed.add(row.dataset.key) : state.collapsed.delete(row.dataset.key);
+}
+
+function setAllCollapsed(collapse) {
+  // 모두 펼치기/접기도 같은 길을 쓴다. 여기만 다시 그리면 그 버튼도 똑같이 씹힌다.
+  for (const row of $('treePane').querySelectorAll('.tnode')) {
+    const kids = row.nextElementSibling;
+    if (kids && kids.classList.contains('tkids')
+        && kids.classList.contains('hidden') !== collapse) toggleNode(row);
+  }
 }
 
 function nodeHtml(n) {
