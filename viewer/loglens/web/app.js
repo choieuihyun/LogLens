@@ -52,7 +52,10 @@ async function boot() {
   state.records = snap.records;
   state.issues = snap.issues;
   setStatus(snap.status, true);
+  applySession(snap.session);
   state.dirty = true;
+  loadVerbose();
+  setInterval(loadVerbose, 15000);
 
   connect();
   setInterval(render, 100);
@@ -92,7 +95,7 @@ function describeSource(s) {
 /* ── SSE 연결 (자동 재연결) ─────────────────────────── */
 function connect() {
   const es = new EventSource('/api/stream');
-  es.addEventListener('open', () => setStatus('스트리밍 중', true));
+  es.addEventListener('open', () => { if (!state.session) setStatus('스트리밍 중', true); });
   es.addEventListener('logs', (e) => {
     if (state.paused) return;
     const batch = JSON.parse(e.data);
@@ -130,7 +133,7 @@ function buildTabs() {
     d.className = 'tab' + (t.id === state.tab ? ' on' : '');
     d.dataset.id = t.id;
     d.innerHTML = `${esc(t.label)}<span class="n" data-n="${esc(t.id)}">0</span>`;
-    d.onclick = () => { state.tab = t.id; buildTabs(); state.treeDirty = true; state.dirty = true; };
+    d.onclick = () => { state.tab = t.id; buildTabs(); updateVerbose(); state.treeDirty = true; state.dirty = true; };
     el.appendChild(d);
   }
 }
@@ -174,6 +177,117 @@ function wire() {
   $('btnDash').onclick = openDash;
   $('dashClose').onclick = () => { $('dash').hidden = true; };
   $('btnTables').onclick = () => openTable(null, null);
+  $('btnFlows').onclick = () => openFlows();
+  $('btnEvents').onclick = () => openEvents();
+  $('vChk').onchange = (e) => toggleVerbose(e.target.checked);
+  $('vChip').onclick = async () => {
+    await fetch('/api/adb/verbose/off-all', { method: 'POST' }).catch(() => null);
+    toast('상세 로그 강제를 모두 껐습니다');
+    loadVerbose();
+  };
+  $('btnSession').onclick = (e) => { e.stopPropagation(); $('sessMenu').hidden = !$('sessMenu').hidden; };
+  $('sessMenu').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    $('sessMenu').hidden = true;
+    if (b.dataset.act === 'export') {
+      window.location.href = '/api/session/export';
+      toast('로그를 파일로 저장합니다 (다운로드 폴더)');
+    } else {
+      $('sessFile').click();
+    }
+  });
+  $('sessFile').onchange = (e) => { importSession(e.target.files[0]); e.target.value = ''; };
+  $('sessLive').onclick = goLive;
+  // 끌어다 놓기로 열기
+  let dragDepth = 0;
+  document.addEventListener('dragenter', (e) => {
+    if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+    dragDepth++;
+    $('dropZone').hidden = false;
+  });
+  document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('dropZone').hidden = true; } });
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    $('dropZone').hidden = true;
+    const f = e.dataTransfer && e.dataTransfer.files[0];
+    if (f) importSession(f);
+  });
+  document.addEventListener('click', (e) => {
+    if (!$('sessMenu').hidden && !e.target.closest('.menuwrap')) $('sessMenu').hidden = true;
+  });
+  $('evClose').onclick = () => { $('evw').hidden = true; };
+  $('evReset').onclick = async () => {
+    await fetch('/api/events/reset', { method: 'POST' }).catch(() => null);
+    toast('지금부터 다시 셉니다');
+    loadEvents();
+  };
+  $('evTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b) { state.evw.tab = b.dataset.tab; renderEvents(); }
+  });
+  // 이벤트 창은 조작할 때만 다시 그린다. 입력칸은 다시 그려도 포커스를 되살린다.
+  $('evBody').addEventListener('input', (e) => {
+    if (e.target.id !== 'evQ') return;
+    state.evw.q = e.target.value;
+    const pos = e.target.selectionStart;
+    renderEvents();
+    const q = $('evQ');
+    q.focus();
+    q.setSelectionRange(pos, pos);
+  });
+  $('evBody').addEventListener('click', (e) => {
+    const v = state.evw;
+    const t = e.target;
+    const pill = t.closest('#evFilters .pill');
+    if (pill) { v.filter = pill.dataset.f; renderEvents(); return; }
+    if (t.closest('#evOnlyLint')) { v.onlyLint = !v.onlyLint; v.sel = null; renderEvents(); return; }
+    const card = t.closest('.ev-card');
+    if (card) { v.tab = 'dict'; v.sel = card.dataset.evt; renderEvents(); return; }
+    const item = t.closest('.ev-item');
+    if (item) { v.sel = item.dataset.evt; renderEvents(); return; }
+    const sl = t.closest('#evShowLogs');
+    if (sl) { showLogsFor(sl.dataset.evt); return; }
+    const go = t.closest('.goto2');
+    if (go) gotoEvent(go.dataset.evt, e.clientX, e.clientY);
+  });
+  $('flwClose').onclick = () => { $('flw').hidden = true; };
+  $('flwRefresh').onclick = () => loadFlows();
+  $('flwQ').oninput = (e) => { state.flw.q = e.target.value; renderFlowList(); };
+  $('flwFilters').addEventListener('click', (e) => {
+    const b = e.target.closest('.pill');
+    if (!b) return;
+    state.flw.filter = b.dataset.f;
+    renderFlowFilters();
+    renderFlowList();
+  });
+  $('flwList').addEventListener('click', (e) => {
+    const b = e.target.closest('.fitem');
+    if (b) loadFlow(b.dataset.id);
+  });
+  // 흐름 본문은 타이머로 다시 그리는 동안(진행 중)에도 누른 순간 처리되도록 mousedown 으로
+  $('flwMain').addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const t = e.target;
+    const go = t.closest('.goto2');
+    if (go) { e.preventDefault(); gotoEvent(go.dataset.evt, e.clientX, e.clientY); return; }
+    const fr = t.closest('button.frame');
+    if (fr) { e.preventDefault(); gotoFrame(fr, e.clientX, e.clientY); return; }
+    const tb = t.closest('.tl-table');
+    if (tb) { e.preventDefault(); openTable(tb.dataset.t, state.flw.sel); return; }
+    if (t.closest('#flwWarn')) {
+      e.preventDefault();
+      state.flw.showWarn = !state.flw.showWarn;
+      if (state.flw.detail) $('flwMain').innerHTML = flowHtml(state.flw.detail);
+      return;
+    }
+    if (t.closest('#flwBase')) { e.preventDefault(); flowBaseline(null); return; }
+    const bc = t.closest('#flwBaseClear');
+    if (bc) { e.preventDefault(); flowBaseline(bc.dataset.kind); }
+  });
+  document.addEventListener('keydown', flowKey);
   $('tblClose').onclick = () => { $('tbl').hidden = true; };
   $('tblGroup').onchange = (e) => { state.tbl.gid = e.target.value; loadDiff(); };
   $('tblCmp').onchange = (e) => { state.tbl.cmp = e.target.value; loadDiff(); };
@@ -227,13 +341,47 @@ function wire() {
     setTimeout(() => { b.textContent = '복사'; }, 1200);
   });
   // 창 바깥(어두운 배경)을 누르면 닫는다. 안쪽을 누른 것은 무시한다.
-  for (const id of ['det', 'tbl', 'dash']) {
+  for (const id of ['det', 'tbl', 'flw', 'evw', 'dash']) {
     $(id).addEventListener('click', (e) => { if (e.target === $(id)) $(id).hidden = true; });
   }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTop(); });
+  $('gotoMenu').addEventListener('click', (e) => {
+    const b = e.target.closest('.gcand');
+    if (!b) return;
+    $('gotoMenu').hidden = true;
+    const it = menuItems[Number(b.dataset.i)];
+    if (it) it.pick();
+  });
+  // 메뉴 바깥을 누르면 닫는다
+  document.addEventListener('mousedown', (e) => {
+    if (!$('gotoMenu').hidden && !e.target.closest('#gotoMenu') && !e.target.closest('.goto, .goto2, button.frame')) {
+      $('gotoMenu').hidden = true;
+    }
+  });
   // 접힌 묶음 줄은 0.1초마다 새로 그려진다. click 은 누른 요소와 뗀 요소가 같아야 성립해서
   // 그 사이에 줄이 갈리면 씹힌다 (트리에서 겪은 것과 같다). 누르는 순간에 처리한다.
   $('logs').addEventListener('mousedown', (e) => {
+    const fl = e.button === 0 && e.target.closest('.flowlink');
+    if (fl) {
+      e.preventDefault();
+      e.stopPropagation();
+      openFlows(fl.dataset.flow);
+      return;
+    }
+    const fr = e.button === 0 && e.target.closest('button.frame');
+    if (fr) {
+      e.preventDefault();
+      e.stopPropagation();
+      gotoFrame(fr, e.clientX, e.clientY);
+      return;
+    }
+    const go = e.button === 0 && e.target.closest('.goto');
+    if (go) {
+      e.preventDefault();
+      e.stopPropagation();
+      gotoEvent(go.dataset.evt, e.clientX, e.clientY);
+      return;
+    }
     const g = e.button === 0 && e.target.closest('.grp');
     if (!g) return;
     e.preventDefault();
@@ -546,6 +694,11 @@ function rowHtml(r, cols) {
     const fields = entries
       .map(([k, v], i) => {
         const w = widths.get(k);
+        if (k === flowField()) {
+          const style = w ? ` style="flex:0 0 ${w}ch"` : '';
+          return `<span class="f"${style}>${esc(k)}=<button class="flowlink" data-flow="${esc(v)}" ` +
+                 `title="이 흐름을 타임라인으로">${esc(v)}</button></span>`;
+        }
         // 마지막 필드는 남는 폭을 다 쓴다. 긴 URL 이 좁은 칸에서 여러 줄로 접히지 않게.
         const last = i === entries.length - 1 && !r.msg;
         const style = w ? ` style="flex:${last ? 1 : 0} 0 ${w}ch"` : '';
@@ -554,14 +707,16 @@ function rowHtml(r, cols) {
       .join('');
     const msg = r.msg ? `<span class="msg">| ${esc(r.msg)}</span>` : '';
     const cut = r.truncated ? '<span class="cut">[cut]</span>' : '';
+    const go = state.cfg.eventSource
+      ? `<button class="goto" data-evt="${esc(r.event)}" title="이 로그를 만든 코드로 이동">↗</button>` : '';
     return `<div class="${cls}">${ts}${lvl}<span class="dom">${esc(r.domain)}</span>` +
-           `<span class="evt">${esc(r.event)}</span><span class="fs">${fields}${msg}${cut}</span></div>`;
+           `<span class="evt">${esc(r.event)}</span><span class="fs">${fields}${msg}${cut}${go}</span></div>`;
   }
   if (r.kind === 'unstructured') {
     return `<div class="${cls}">${ts}${lvl}<span class="tag">${esc(r.tag)}</span>` +
-           `<span class="body">${esc(r.msg || '')}</span></div>`;
+           `<span class="body">${withFrames(r.msg || '')}</span></div>`;
   }
-  return `<div class="${cls}"><span class="body">${esc(r.raw)}</span></div>`;
+  return `<div class="${cls}"><span class="body">${withFrames(r.raw)}</span></div>`;
 }
 
 /* 접힌 묶음 한 줄. 첫 줄의 시각·도메인·이벤트 자리에 그대로 서서 열이 흐트러지지 않는다. */
@@ -577,6 +732,7 @@ function groupRowHtml(g) {
 }
 
 const isMasked = (v) => v === '***';
+const flowField = () => (state.cfg.flow && state.cfg.flow.field) || 'flowId';
 const shortTs = (ts) => (ts.length > 12 ? ts.slice(-12) : ts);
 
 function esc(s) {
@@ -749,9 +905,9 @@ function rowHit(s, key, valueObjs) {
 const KEY_ORDER = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' });
 function byKey(a, b) { return KEY_ORDER.compare(String(a.key), String(b.key)); }
 
-const ST_LABEL = { on: '켜짐', off: '꺼짐', extra: '목록 밖' };
+const ST_LABEL = { on: '켜짐', off: '꺼짐', extra: '클라이언트 구현 외' };
 
-/* 한 묶음을 코드 단위로 모은다. 켜짐/꺼짐/목록 밖과 형식 문제 수를 같이 매긴다. */
+/* 한 묶음을 코드 단위로 모은다. 켜짐/꺼짐/클라이언트 구현 외와 형식 문제 수를 같이 매긴다. */
 function codeItems(t, g) {
   const cat = new Map((t.catalog || []).map((c) => [c.code, c]));
   const hasCat = cat.size > 0;
@@ -786,7 +942,7 @@ function itemHit(s, it) {
    동작하는 항목이 있어서, 값 유무로 흐리게 하면 멀쩡히 동작하는 것이 꺼진 것처럼 보인다.
      켜짐   목록에 있고 들어온 것
      꺼짐   목록에 있는데 이번 묶음에 안 들어온 것
-     목록 밖 들어왔는데 목록에 없는 것 (앱이 처리하지 않는 항목)
+     클라이언트 구현 외  들어왔는데 목록에 없는 것 (앱이 처리하지 않는 항목)
    검색은 코드·이름·값까지 뒤진다 — 값으로 코드를 찾는 경우가 많다. */
 function groupHtml(s) {
   const t = s.table;
@@ -811,7 +967,7 @@ function groupHtml(s) {
               [it.rows.flatMap((r) => r.problems || []).join('; ')])),
   };
 
-  const TITLE = { on: '들어옴', off: '이번 묶음에 안 들어옴', extra: '들어왔지만 구현 목록에 없음' };
+  const TITLE = { on: '들어옴', off: '이번 묶음에 안 들어옴', extra: '들어왔지만 클라이언트가 구현하지 않음' };
   const cells = items.map((it) =>
     `<button class="code ${it.st}${it.bad ? ' bad' : ''}" data-k="${esc(it.key)}" data-g="${esc(g.id)}"` +
     ` title="${TITLE[it.st]}${it.bad ? ' · 형식 문제 있음' : ''} · 눌러서 상세 보기">` +
@@ -820,12 +976,12 @@ function groupHtml(s) {
     (it.info && it.info.name ? `<span class="cname">${esc(it.info.name)}</span>` : '') + '</span>' +
     (it.bad ? '<span class="cbad">⚠</span>' : '') +
     (it.rows.length > 1 ? `<b class="cn">×${it.rows.length}</b>` : '') +
-    (it.st === 'extra' ? '<span class="ctag">목록 밖</span>' : '') +
+    (it.st === 'extra' ? '<span class="ctag">클라이언트 구현 외</span>' : '') +
     '</button>').join('');
 
   const counts = (hasCat
     ? `<span class="lc on">켜짐 ${n.on}</span><span class="lc off">꺼짐 ${n.off}</span>` +
-      (n.extra ? `<span class="lc extra">목록 밖 ${n.extra}</span>` : '') +
+      (n.extra ? `<span class="lc extra">클라이언트 구현 외 ${n.extra}</span>` : '') +
       `<span class="lc">구현 목록 ${(t.catalog || []).length}개 · 받은 줄 ${g.rows.length}개</span>`
     : `<span class="lc">코드 ${n.on}개 · 받은 줄 ${g.rows.length}개</span>` +
       '<span class="lc hint2">구현한 코드 목록(설정의 catalog)을 넣으면 안 들어온 것이 꺼진 불로 보입니다</span>') +
@@ -883,6 +1039,612 @@ function histHtml(s) {
     '<span class="lc hint2">칸을 누르면 그 묶음의 상세. 머리글에 마우스를 올리면 묶음 이름</span></p>' +
     (rows.length ? `<div class="histwrap"><table class="hist"><thead>${head}</thead><tbody>${body}</tbody></table></div>`
                  : '<p class="nodata">일치하는 코드 없음</p>');
+}
+
+/* ── 도메인별 상세 로그 스위치 (adb) ───────────────────── */
+/* 릴리스 빌드에서도 도메인 하나만 V/D 로그를 연다 (setprop log.tag.<태그> VERBOSE).
+   기기 속성이라 뷰어를 꺼도 남는다. 그래서 하나라도 켜져 있으면 머리에 늘 보여준다. */
+async function loadVerbose() {
+  if (!state.cfg.source || state.cfg.source.kind !== 'adb') return;
+  try {
+    const res = await fetch('/api/adb/verbose');
+    if (!res.ok) throw new Error();
+    state.verbose = await res.json();
+  } catch (_) {
+    state.verbose = { available: false };
+  }
+  updateVerbose();
+}
+
+function updateVerbose() {
+  const v = state.verbose || { available: false };
+  const tab = tabOf(state.tab);
+  const doms = tab ? (tab.domains || []) : [];
+  const show = v.available && doms.length > 0;
+  $('vWrap').hidden = !show;
+  if (show) {
+    const on = doms.every((d) => v.states[d]);
+    $('vChk').checked = on;
+    $('vLabel').textContent = `${tab.label} 상세 로그(V/D) ${on ? '켜짐' : '강제 켜기'}`;
+    const long = doms.filter((d) => (v.tooLong || []).includes(d));
+    $('vWrap').title = `기기에 setprop log.tag.${v.prefix}_${doms.join('/')} VERBOSE — 릴리스 빌드에서도 이 도메인의 V/D 로그가 찍힙니다.\n` +
+      'LogLens 로그에만 적용됩니다. 기기에 남는 설정이라 뷰어를 꺼도 유지됩니다.' +
+      (long.length ? `\n⚠ 태그가 23자를 넘어 구형 기기에서는 안 먹을 수 있음: ${long.join(', ')}` : '');
+  }
+  const onList = v.available ? Object.keys(v.states || {}).filter((d) => v.states[d]) : [];
+  $('vChip').hidden = !onList.length;
+  $('vChip').textContent = `상세 로그 켜짐: ${onList.join(', ')} · 모두 끄기`;
+}
+
+async function toggleVerbose(on) {
+  const tab = tabOf(state.tab);
+  if (!tab) return;
+  let ok = true;
+  for (const d of tab.domains || []) {
+    const res = await fetch(`/api/adb/verbose?domain=${encodeURIComponent(d)}&on=${on ? 1 : 0}`, { method: 'POST' }).catch(() => null);
+    ok = ok && !!(res && res.ok);
+  }
+  toast(ok ? `${tab.label} 상세 로그를 ${on ? '켰습니다' : '껐습니다'}` : '기기에 적용하지 못했습니다', !ok);
+  loadVerbose();
+}
+
+/* ── 세션 파일 ──────────────────────────────────────── */
+/* 저장: 지금 버퍼를 .loglens 파일 하나로. 열기: 실시간 수신을 멈추고 파일 내용을 본다.
+   무엇을 보는 중인지 헷갈리지 않게, 보는 동안은 머리 아래에 띠를 띄운다. */
+function applySession(sess) {
+  const was = state.session;
+  state.session = sess || null;
+  $('sessBar').hidden = !sess;
+  // 상태 글자도 맞춘다. 파일을 보는 중인데 "스트리밍 중" 이라고 하면 헷갈린다.
+  if (sess) setStatus('세션 파일 보기', true);
+  else if (was) setStatus('스트리밍 중', true);
+  if (sess) $('sessName').textContent = `${sess.name} · ${sess.lines.toLocaleString()}줄`;
+  document.body.classList.toggle('viewing-session', !!sess);
+}
+
+async function reloadSnapshot() {
+  const snap = await (await fetch('/api/snapshot?limit=20000')).json();
+  state.records = snap.records;
+  state.issues = snap.issues;
+  state.issueFilter = null;
+  applySession(snap.session);
+  renderTray();
+  state.treeDirty = true;
+  state.dirty = true;
+  refreshTree();
+}
+
+async function importSession(file) {
+  if (!file) return;
+  if (!state.session && state.records.length &&
+      !confirm(`'${file.name}' 을 엽니다.\n\n지금 화면의 로그는 비워지고, 실시간 수신은 "실시간으로 돌아가기" 를 누를 때까지 멈춥니다.`)) return;
+  toast(`${file.name} 여는 중…`);
+  let r;
+  try {
+    const text = await file.text();
+    const res = await fetch(`/api/session/import?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: text });
+    r = await res.json();
+    if (!res.ok || !r.ok) throw new Error(r.error || String(res.status));
+  } catch (e) {
+    toast(`열지 못했습니다: ${e.message || e}`, true);
+    return;
+  }
+  await reloadSnapshot();
+  toast(`${file.name} — ${r.lines.toLocaleString()}줄을 열었습니다`);
+}
+
+async function goLive() {
+  await fetch('/api/session/live', { method: 'POST' }).catch(() => null);
+  await reloadSnapshot();
+  toast('실시간 수신으로 돌아왔습니다');
+}
+
+/* ── 이벤트: 커버리지 · 사전 ───────────────────────────── */
+/* 커버리지: 앱이 찍을 수 있는 이벤트 중 이번에 지나간 것과 안 지나간 것. "안 탄 코드 경로" 가 보인다.
+   사전: 이벤트마다 싣는 필드(소스)와 실제로 온 필드·값, 찍는 곳, 이름 검사 결과. */
+async function openEvents(tab, evt) {
+  const v = state.evw || (state.evw = { tab: 'cov', filter: 'all', q: '', sel: null, onlyLint: false });
+  if (tab) v.tab = tab;
+  if (evt) v.sel = evt;
+  $('evw').hidden = false;
+  await loadEvents();
+}
+
+async function loadEvents() {
+  const v = state.evw;
+  try {
+    const res = await fetch('/api/events');
+    if (!res.ok) throw new Error(String(res.status));
+    v.data = await res.json();
+  } catch (_) {
+    $('evBody').innerHTML = '<p class="nodata">이벤트를 불러오지 못했습니다. 뷰어 서버가 이 기능보다 오래된 버전이면 재시작해야 합니다.</p>';
+    return;
+  }
+  const lintN = v.data.lint.filter((l) => l.level === 'warn').length;
+  $('evLintN').textContent = lintN ? `⚠${lintN}` : '';
+  $('evScope').textContent = `기준: ${v.data.scope}`;
+  renderEvents();
+}
+
+function renderEvents() {
+  const v = state.evw;
+  for (const b of $('evTabs').querySelectorAll('button')) b.classList.toggle('on', b.dataset.tab === v.tab);
+  $('evBody').innerHTML = v.tab === 'cov' ? coverageHtml(v) : dictHtml(v);
+}
+
+function lintOf(ev) {
+  return (state.evw.data.lint || []).filter((l) => (l.events || []).includes(ev));
+}
+
+function coverageHtml(v) {
+  const d = v.data;
+  const src = d.events.filter((e) => e.inSource !== false);
+  const total = src.length;
+  const hit = src.filter((e) => e.seen).length;
+  const pct = total ? Math.round((hit / total) * 100) : 0;
+  const banner = d.hasSource ? ''
+    : `<div class="fbase none"><span class="fb-l">앱 소스를 읽지 않아 <b>안 지나간 이벤트</b>는 알 수 없습니다. ` +
+      `설정에 <code>eventSource</code> 를 넣으면 앱이 찍을 수 있는 이벤트 전부와 견줍니다.` +
+      (d.sourceError ? ` <i>(${esc(d.sourceError)})</i>` : '') + '</span></div>';
+  // 도메인별
+  const doms = new Map();
+  for (const e of d.events) {
+    const k = e.domain || '기타';
+    if (!doms.has(k)) doms.set(k, []);
+    doms.get(k).push(e);
+  }
+  // 진행 막대는 앱 소스에 있는 이벤트로만 잰다. 소스에 없는 도메인은 막대가 0/0 이 되니 뺀다.
+  const domRows = [...doms.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    .filter(([, list]) => list.some((e) => e.inSource !== false)).map(([k, list]) => {
+    const t = list.filter((e) => e.inSource !== false).length;
+    const h = list.filter((e) => e.inSource !== false && e.seen).length;
+    const p = t ? Math.round((h / t) * 100) : 0;
+    return `<div class="dom-row"><span class="dom">${esc(k)}</span>` +
+      `<span class="track"><span class="fill ${p === 100 ? 'ok' : ''}" style="width:${p}%"></span></span>` +
+      `<span class="val">${h}/${t}</span></div>`;
+  }).join('');
+  const hero = d.hasSource
+    ? `<div class="cov-hero"><div class="cov-big"><b>${hit}</b><span>/ ${total}</span></div>` +
+      `<div class="cov-sub">이벤트가 이번에 지나감 <b>${pct}%</b>` +
+      `<span class="track big"><span class="fill ${pct === 100 ? 'ok' : ''}" style="width:${pct}%"></span></span>` +
+      `<i>안 지나간 ${total - hit}개 = 이번 테스트에서 안 탄 코드 경로</i></div>` +
+      `<div class="cov-doms">${domRows}</div></div>` : '';
+
+  const FILTERS = [['all', '전체', () => true], ['off', '안 지나감', (e) => !e.seen], ['on', '지나감', (e) => e.seen]];
+  const test = (FILTERS.find((f) => f[0] === v.filter) || FILTERS[0])[2];
+  const q = v.q.toLowerCase();
+  const pills = FILTERS.map(([k, label, t]) =>
+    `<button class="pill${v.filter === k ? ' on' : ''}" data-f="${k}">${label}<b>${d.events.filter(t).length}</b></button>`).join('');
+  const groups = [...doms.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([k, list]) => {
+    const shown = list.filter((e) => test(e) && (!q || e.event.toLowerCase().includes(q))).sort(byKeyEvt);
+    if (!shown.length) return '';
+    return `<div class="ev-group"><div class="ev-gh"><span class="dom">${esc(k)}</span></div><div class="ev-cards">` +
+      shown.map((e) => {
+        const warn = lintOf(e.event).some((l) => l.level === 'warn');
+        const st = e.inSource === false ? 'extra' : (e.seen ? 'on' : 'off');
+        return `<button class="ev-card ${st}" data-evt="${esc(e.event)}" title="${st === 'extra' ? '로그에는 왔지만 앱 소스에서 못 찾음 · ' : ''}눌러서 사전에서 보기">` +
+          '<i class="lamp"></i><span class="cbody">' +
+          `<span class="ck">${esc(e.event)}${warn ? ' <span class="cbad">⚠</span>' : ''}</span>` +
+          `<span class="cname">${e.inSource === false ? `소스에 없음 · ×${e.seen}` : (e.seen ? `×${e.seen} · 마지막 ${esc(shortTs(e.lastTs || '').slice(0, 8))}` : '안 지나감')}</span>` +
+          '</span></button>';
+      }).join('') + '</div></div>';
+  }).join('');
+  return banner + hero +
+    `<div class="ev-tools"><div class="flw-filters" id="evFilters">${pills}</div>` +
+    `<input id="evQ" class="q" type="search" placeholder="이벤트 이름" value="${esc(v.q)}" autocomplete="off"></div>` +
+    (groups || '<p class="nodata">조건에 맞는 이벤트가 없습니다</p>');
+}
+
+function byKeyEvt(a, b) { return KEY_ORDER.compare(a.event, b.event); }
+
+function dictHtml(v) {
+  const d = v.data;
+  const q = v.q.toLowerCase();
+  let list = d.events.slice().sort(byKeyEvt)
+    .filter((e) => (!q || e.event.toLowerCase().includes(q)) && (!v.onlyLint || lintOf(e.event).length));
+  if (!v.sel && list.length) v.sel = list[0].event;
+  const side = `<aside class="flw-side">` +
+    `<div class="flw-filters"><button class="pill${v.onlyLint ? ' on' : ''}" id="evOnlyLint">검사 결과 있는 것만<b>${new Set(d.lint.flatMap((l) => l.events || [])).size}</b></button></div>` +
+    `<input id="evQ" class="q" type="search" placeholder="이벤트 이름" value="${esc(v.q)}" autocomplete="off">` +
+    `<div class="flw-list">` + (list.length ? list.map((e) => {
+      const ls = lintOf(e.event);
+      return `<button class="fitem ev-item ${e.seen ? 'st-success' : 'st-stalled'}${e.event === v.sel ? ' sel' : ''}" data-evt="${esc(e.event)}">` +
+        '<span class="fdot"></span><span class="fbody"><span class="ftop">' +
+        `<b>${esc(e.event)}</b><span class="fst">${esc(e.domain)}</span></span>` +
+        `<span class="fsub">${e.seen ? `×${e.seen}` : '안 지나감'}${ls.length ? ` · <span class="fdev">⚠ ${ls.length}</span>` : ''}</span>` +
+        '</span></button>';
+    }).join('') : '<p class="nodata">없음</p>') + '</div></aside>';
+  const e = d.events.find((x) => x.event === v.sel);
+  return `<div class="flw-grid ev-dict">${side}<section class="flw-main">${e ? eventDetail(e) : allLint(d)}</section></div>`;
+}
+
+function allLint(d) {
+  return d.lint.length ? `<div class="lint-list">${d.lint.map(lintRow).join('')}</div>` : '<p class="nodata">이름 검사에서 걸린 것이 없습니다</p>';
+}
+
+function lintRow(l) {
+  return `<div class="lint ${l.level}"><b>${l.level === 'warn' ? '⚠' : 'ℹ'}</b><span>${esc(l.message)}</span></div>`;
+}
+
+function eventDetail(e) {
+  const declared = new Set(e.declared || []);
+  const observed = new Set(e.observed || []);
+  const keys = [...new Set([...(e.declared || []), ...(e.observed || [])])];
+  const rows = keys.map((k) => {
+    const inS = declared.has(k), inL = observed.has(k);
+    const note = !inS ? '소스에 없음' : (!inL && e.seen ? '안 옴' : '');
+    return `<tr class="${note ? 'warn' : ''}"><th>${esc(k)}</th><td class="c">${inS ? '✓' : '—'}</td>` +
+      `<td class="c">${inL ? '✓' : (e.seen ? '—' : '')}</td>` +
+      `<td>${e.example && k in e.example ? fmtVal(e.example[k]) : ''}${note ? ` <span class="tb miss">${note}</span>` : ''}</td></tr>`;
+  }).join('');
+  const emits = (e.emits || []).map((m) => `<div class="emit"><code>${esc(m.where.split('/').pop())}</code>` +
+    (m.method ? `<span>${esc(m.method)}()</span>` : '') + '</div>').join('');
+  const ls = lintOf(e.event);
+  return `<div class="fh"><div class="fh-title"><b>${esc(e.event)}</b>` +
+    `<span class="dom">${esc(e.domain)}</span>${(e.levels || []).map((l) => `<span class="lvtag lv-${l}">${l}</span>`).join('')}` +
+    `<span class="fbadge ${e.seen ? 'st-success' : 'st-stalled'}">${e.seen ? `이번에 ${e.seen}번 옴` : '이번에 안 지나감'}</span></div>` +
+    `<div class="fh-meta">${e.seen ? `마지막 ${esc(e.lastTs || '')}` : (e.inSource === false ? '로그에는 왔지만 소스에서 못 찾음' : '앱 소스에는 있지만 이번 로그에는 한 번도 안 옴')}</div></div>` +
+    '<div class="ev-acts">' +
+    (e.seen ? `<button class="btn sm" id="evShowLogs" data-evt="${esc(e.event)}">로그에서 보기</button>` : '') +
+    (state.cfg.eventSource && e.inSource !== false ? `<button class="btn sm goto2" data-evt="${esc(e.event)}">↗ 코드</button>` : '') +
+    '</div>' +
+    (ls.length ? `<div class="lint-list">${ls.map(lintRow).join('')}</div>` : '') +
+    `<div class="dsec">필드</div>` +
+    (keys.length ? `<table class="grid ev-fields"><thead><tr><th>필드</th><th class="c">소스</th><th class="c">로그</th><th>예시 값 (처음 온 값)</th></tr></thead><tbody>${rows}</tbody></table>`
+                 : '<p class="nodata">필드 없음</p>') +
+    (emits ? `<div class="dsec">찍는 곳 (${(e.emits || []).length})</div><div class="emits">${emits}</div>` : '');
+}
+
+function showLogsFor(evt) {
+  for (const id of ['evw', 'flw', 'tbl', 'det', 'dash']) $(id).hidden = true;
+  state.q = evt;
+  $('q').value = evt;
+  compileQuery();
+  state.tab = 'all';
+  buildTabs();
+  state.dirty = true;
+}
+
+/* ── 흐름 (flowId 타임라인 + 기준선) ───────────────────── */
+/* 로그인 한 번이 실패하면 먼저 묻는 것: 어디서 멈췄나, 어느 단계가 느렸나, 그때 무슨 일이 있었나.
+   왼쪽은 흐름 목록, 오른쪽은 한 흐름의 세로 타임라인. 단계 간격을 막대 길이로 보여줘
+   "시간이 어디서 샜나" 가 한눈에 보이게 한다. 색 약속: 초록 성공 · 빨강 실패 · 노랑 느림 · 점선 안 옴. */
+const FLOW_STATUS = { success: '성공', failure: '실패', open: '진행 중', stalled: '멈춤' };
+const FLOW_FILTERS = [
+  ['all', '전체', () => true],
+  ['failure', '실패', (f) => f.status === 'failure'],
+  ['dev', '기준선과 다름', (f) => f.deviation && f.deviation.flag],
+  ['open', '진행 중·멈춤', (f) => f.status === 'open' || f.status === 'stalled'],
+];
+
+function fmtMs(ms) {
+  if (ms == null) return '—';
+  if (Math.abs(ms) < 1000) return `${ms}ms`;
+  if (Math.abs(ms) < 60000) return `${(ms / 1000).toFixed(2)}초`;
+  return `${Math.floor(ms / 60000)}분 ${Math.round((ms % 60000) / 1000)}초`;
+}
+
+async function openFlows(id) {
+  const f = state.flw || (state.flw = { list: [], filter: 'all', q: '', sel: null, detail: null });
+  if (id) { f.sel = id; f.filter = 'all'; f.q = ''; $('flwQ').value = ''; }
+  $('flw').hidden = false;
+  await loadFlows();
+}
+
+async function loadFlows() {
+  const f = state.flw;
+  let d;
+  try {
+    const res = await fetch('/api/flows');
+    if (!res.ok) throw new Error(String(res.status));
+    d = await res.json();
+  } catch (_) {
+    $('flwList').innerHTML = '';
+    $('flwMain').innerHTML = '<p class="nodata">흐름을 불러오지 못했습니다. 뷰어 서버가 이 기능보다 오래된 버전이면 재시작해야 합니다.</p>';
+    return;
+  }
+  f.list = d.flows.slice().reverse();          // 최신이 위
+  f.baselines = d.baselines || {};
+  f.canBaseline = d.canBaseline;
+  if (!f.sel || !f.list.some((x) => x.id === f.sel)) f.sel = f.list.length ? f.list[0].id : null;
+  renderFlowFilters();
+  renderFlowList();
+  if (f.sel) loadFlow(f.sel); else renderFlowEmpty();
+}
+
+function renderFlowEmpty() {
+  const fld = (state.cfg.flow && state.cfg.flow.field) || 'flowId';
+  $('flwMain').innerHTML = `<div class="empty-big"><b>아직 흐름이 없습니다</b>` +
+    `<p><code>${esc(fld)}=</code> 필드가 달린 로그가 들어오면 여기에 모입니다.<br>` +
+    '지난 흐름은 버퍼(최근 로그)에서 밀려났을 수 있습니다 — 앱에서 다시 한 번 해 보면 바로 나타납니다.<br>' +
+    '다른 필드로 흐름을 잇는다면 설정의 <code>flow.field</code> 를 바꾸세요.</p></div>';
+}
+
+function flowVisible() {
+  const f = state.flw;
+  const test = (FLOW_FILTERS.find((x) => x[0] === f.filter) || FLOW_FILTERS[0])[2];
+  const q = (f.q || '').toLowerCase();
+  return f.list.filter((x) => test(x) &&
+    (!q || [x.id, x.label, x.lastEvent, x.kind].some((v) => String(v || '').toLowerCase().includes(q))));
+}
+
+function renderFlowFilters() {
+  const f = state.flw;
+  $('flwFilters').innerHTML = FLOW_FILTERS.map(([k, label, test]) => {
+    const n = f.list.filter(test).length;
+    return `<button class="pill${f.filter === k ? ' on' : ''} pf-${k}" data-f="${k}">${label}<b>${n}</b></button>`;
+  }).join('');
+}
+
+function renderFlowList() {
+  const f = state.flw;
+  const items = flowVisible();
+  const funnelName = (k) => ((state.cfg.funnels || []).find((x) => x.id === k) || {}).label || k;
+  $('flwList').innerHTML = items.length ? items.map((x) =>
+    `<button class="fitem st-${x.status}${x.id === f.sel ? ' sel' : ''}" data-id="${esc(x.id)}">` +
+    `<span class="fdot"></span>` +
+    `<span class="fbody"><span class="ftop"><b>${esc(x.label || x.id)}</b>` +
+    `<span class="fst">${FLOW_STATUS[x.status]}</span></span>` +
+    `<span class="fsub">${esc(funnelName(x.kind))} · ${esc(shortTs(x.firstTs || '').slice(0, 8))} · ${fmtMs(x.durationMs)} · ${x.steps}단계</span>` +
+    (x.deviation && x.deviation.flag ? `<span class="fdev">⚠ 기준선과 다름${x.deviation.slow ? ' · 느림' : ''}</span>` : '') +
+    '</span></button>').join('')
+    : '<p class="nodata">조건에 맞는 흐름이 없습니다</p>';
+}
+
+async function loadFlow(id) {
+  const f = state.flw;
+  f.sel = id;
+  clearTimeout(f.timer);
+  for (const b of $('flwList').querySelectorAll('.fitem')) b.classList.toggle('sel', b.dataset.id === id);
+  let d;
+  try {
+    const res = await fetch(`/api/flows/detail?id=${encodeURIComponent(id)}`);
+    d = await res.json();
+    if (!res.ok) throw new Error(d.error || String(res.status));
+  } catch (e) {
+    $('flwMain').innerHTML = `<p class="nodata">${esc(e.message || '흐름을 불러오지 못했습니다')}</p>`;
+    return;
+  }
+  if (f.sel !== id) return;                     // 그 사이 다른 걸 골랐다
+  f.detail = d;
+  $('flwMain').innerHTML = flowHtml(d);
+  // 진행 중이면 따라간다. 창을 닫거나 다른 흐름을 고르면 멈춘다.
+  if (d.status === 'open') {
+    f.timer = setTimeout(() => { if (!$('flw').hidden && f.sel === id) loadFlow(id); }, 2000);
+  }
+}
+
+function flowHtml(d) {
+  const f = state.flw;
+  const funnel = (state.cfg.funnels || []).find((x) => x.id === d.kind);
+  const cmp = d.compare;
+  const cmpBy = {};
+  if (cmp) for (const p of cmp.steps) if (!(p.event in cmpBy)) cmpBy[p.event] = p;
+
+  // 머리: 누구의 무엇이 어떻게 끝났나
+  const age = (d.status === 'open' || d.status === 'stalled') && d.ageMs != null
+    ? `<span class="fage">마지막 로그 ${fmtMs(d.ageMs)} 전</span>` : '';
+  let head = `<div class="fh"><div class="fh-title"><b>${esc(d.label || d.id)}</b>` +
+    (d.label ? `<span class="fh-id">${esc(d.id)}</span>` : '') +
+    `<span class="fbadge st-${d.status}">${FLOW_STATUS[d.status]}</span></div>` +
+    `<div class="fh-meta">${esc(funnel ? funnel.label : d.kind)} · 총 ${fmtMs(d.durationMs)} · ${d.steps.length}단계 ${age}` +
+    ctxSummary(d) + '</div></div>';
+
+  // 기준선 막대
+  let base;
+  if (d.baseline) {
+    const sm = cmp.summary;
+    const chips = sm.ok ? '<span class="lc on">기준선과 같음</span>'
+      : [sm.slow ? `<span class="lc slow">느린 단계 ${sm.slow}</span>` : '',
+         sm.missing ? `<span class="lc bad">빠진 단계 ${sm.missing}</span>` : '',
+         sm.extra ? `<span class="lc extra">새 단계 ${sm.extra}</span>` : '',
+         sm.reordered ? '<span class="lc extra">순서 바뀜</span>' : ''].join('');
+    base = `<div class="fbase"><span class="fb-l">기준선 <b>${esc(d.baseline.label || d.baseline.flowId)}</b>` +
+      ` <i>${esc((d.baseline.savedAt || '').replace('T', ' ').slice(0, 16))} 저장</i></span>${chips}` +
+      `<span class="fb-act">` +
+      (d.baseline.flowId === d.id ? '<span class="lc">이 흐름이 기준선</span>'
+        : (f.canBaseline ? '<button class="btn sm" id="flwBase">이 흐름으로 바꾸기</button>' : '')) +
+      `<button class="btn sm ghost" id="flwBaseClear" data-kind="${esc(d.kind)}">기준선 지우기</button></span></div>`;
+  } else if (f.canBaseline) {
+    base = '<div class="fbase none"><span class="fb-l">정상적으로 끝난 흐름 하나를 기준선으로 저장해 두면, 같은 종류의 흐름을 자동으로 견줍니다.</span>' +
+      `<span class="fb-act"><button class="btn sm" id="flwBase"${d.status === 'success' ? '' : ' title="보통은 성공한 흐름을 기준선으로 씁니다"'}>이 흐름을 기준선으로</button></span></div>`;
+  } else {
+    base = '<div class="fbase none"><span class="fb-l">기준선 비교를 쓰려면 설정에 <code>snapshotDir</code> 를 넣으세요 (기준선을 저장할 곳).</span></div>';
+  }
+
+  // 타임라인: 단계와 그 시간대의 경고·에러를 시각 순으로 섞는다
+  const deltas = d.steps.slice(1).map((s) => s.delta || 0);
+  const maxDelta = Math.max(1, ...deltas);
+  // 단계는 받은 순서를 지킨다 (기기 시각이 뒤섞여도 순서가 뒤집히지 않게).
+  // 경고·에러는 시각에 맞춰 단계 사이에 끼워 넣는다.
+  // 에러는 늘 보인다. 경고는 앱에 따라 수십 줄이라 타임라인을 덮으므로 켤 때만.
+  const ctx = d.context.filter((c) => c.level === 'E' || f.showWarn)
+    .sort((a, b) => (a.offset ?? 0) - (b.offset ?? 0));
+  const items = [];
+  let ci = 0;
+  d.steps.forEach((s, i) => {
+    while (ci < ctx.length && i > 0 && (ctx[ci].offset ?? 0) < (s.offset ?? 0)) items.push({ k: 'ctx', c: ctx[ci++] });
+    items.push({ k: 'step', s, i });
+  });
+  while (ci < ctx.length) items.push({ k: 'ctx', c: ctx[ci++] });
+
+  const rows = items.map((it) => {
+    if (it.k === 'ctx') {
+      const c = it.c;
+      return `<div class="tl-row ctx lv-${c.level}"><div class="tl-time">+${fmtMs(c.offset)}</div>` +
+        '<div class="tl-rail"><i></i></div>' +
+        `<div class="tl-body"><span class="ctx-tag">${c.level} ${esc(c.tag || '')}</span>` +
+        `<span class="ctx-text">${withFrames(String(c.text || '').slice(0, 300))}</span></div></div>`;
+    }
+    const s = it.s;
+    const p = cmpBy[s.event];
+    const fail = s.outcome === 'failure' || s.level === 'E';
+    const cls = ['tl-row', 'step', fail ? 'fail' : '', s.outcome === 'success' ? 'ok' : '',
+                 p && p.state === 'slow' ? 'slow' : '', p && p.state === 'extra' ? 'extra' : ''].join(' ');
+    const pct = it.i === 0 ? 0 : Math.max(2, Math.round(((s.delta || 0) / maxDelta) * 100));
+    // 접힌 묶음(설정 목록 등)은 첫 항목의 값을 보여주면 묶음 전체의 값처럼 읽힌다. 개수만.
+    const chipsAll = s.table ? [] : Object.entries(s.fields || {});
+    const chips = chipsAll.slice(0, 5).map(([k, v]) => `<span class="kv"><i>${esc(k)}</i>${esc(v)}</span>`).join('') +
+      (chipsAll.length > 5 ? `<span class="more">+${chipsAll.length - 5}</span>` : '');
+    const badges = (p && p.state === 'slow'
+      ? `<span class="tb slow" title="기준선보다 2배 이상, 200ms 이상 느림">느림 ${fmtMs(p.base)} → ${fmtMs(p.cur)} (${p.ratio}배)</span>` : '') +
+      (p && p.state === 'extra' ? '<span class="tb extra">기준선에 없던 단계</span>' : '');
+    const acts = (s.table ? `<button class="tl-act tl-table" data-t="${esc(s.table)}">표로 보기</button>` : '') +
+      (state.cfg.eventSource ? `<button class="tl-act goto2" data-evt="${esc(s.event)}" title="이 로그를 만든 코드로">↗ 코드</button>` : '');
+    return `<div class="${cls}"><div class="tl-time"><span>${it.i === 0 ? '시작' : '+' + fmtMs(s.delta)}</span>` +
+      `<span class="tl-bar"><i style="width:${pct}%"></i></span></div>` +
+      '<div class="tl-rail"><i></i></div>' +
+      `<div class="tl-body"><div class="tl-l1"><b class="tl-evt">${esc(s.event)}</b>` +
+      (s.count > 1 ? `<span class="tl-cnt">×${s.count}</span>` : '') + badges +
+      `<span class="tl-acts">${acts}</span></div>` +
+      (chips ? `<div class="tl-l2">${chips}</div>` : '') +
+      (s.table ? `<div class="tl-msg">항목 ${s.count}개 — 값은 표로 보기에서</div>` : '') +
+      (s.msg && !s.table ? `<div class="tl-msg">${esc(s.msg)}</div>` : '') + '</div></div>';
+  });
+
+  // 안 온 단계: 퍼널 정의 + 기준선. 진행 중이면 "아직"
+  const miss = [...new Set((d.missing || []).concat(cmp ? cmp.missing : []))];
+  for (const e of miss) {
+    rows.push(`<div class="tl-row step miss"><div class="tl-time"><span>${d.status === 'open' ? '아직' : '안 옴'}</span></div>` +
+      `<div class="tl-rail"><i></i></div><div class="tl-body"><div class="tl-l1"><b class="tl-evt">${esc(e)}</b>` +
+      `<span class="tb miss">${d.status === 'open' ? '아직 안 옴' : '이 단계가 오지 않았음'}</span></div></div></div>`);
+  }
+  return head + base + `<div class="timeline">${rows.join('')}</div>`;
+}
+
+/* 그 시간대의 같은 앱 에러·경고 개수. 경고는 눌러서 켠다. */
+function ctxSummary(d) {
+  const c = d.contextCounts || { E: 0, W: 0 };
+  if (!c.E && !c.W) return ' · <span class="ctxsum">그 시간대 에러·경고 없음</span>';
+  return ` · <span class="ctxsum">그 시간대 <b class="e">에러 ${c.E}</b>` +
+    (c.W ? ` · <button class="ctxw${state.flw.showWarn ? ' on' : ''}" id="flwWarn">경고 ${c.W}${state.flw.showWarn ? ' 숨기기' : ' 보기'}</button>` : '') +
+    '</span>';
+}
+
+async function flowBaseline(clearKind) {
+  const f = state.flw;
+  const u = clearKind ? `/api/flows/baseline/clear?kind=${encodeURIComponent(clearKind)}`
+                      : `/api/flows/baseline?id=${encodeURIComponent(f.sel)}`;
+  const res = await fetch(u, { method: 'POST' }).catch(() => null);
+  const d = res ? await res.json().catch(() => ({})) : {};
+  toast(res && res.ok ? (clearKind ? '기준선을 지웠습니다' : '기준선으로 저장했습니다')
+                      : `실패: ${d.error || '서버 응답 없음'}`, !(res && res.ok));
+  loadFlows();
+}
+
+function flowKey(e) {
+  if ($('flw').hidden || !state.flw || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+  if (e.target.closest && e.target.closest('input, select, textarea')) return;
+  const items = flowVisible();
+  const i = items.findIndex((x) => x.id === state.flw.sel);
+  const n = items[Math.max(0, Math.min(items.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+  if (n && n.id !== state.flw.sel) {
+    e.preventDefault();
+    loadFlow(n.id);
+    const b = $('flwList').querySelector(`.fitem[data-id="${CSS.escape(n.id)}"]`);
+    if (b) b.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+/* ── 크래시 스택 줄 → 코드 ──────────────────────────── */
+/* at com.x.Foo$Bar.run(Foo.kt:88) 에서 앱 코드인 줄만 누를 수 있게 한다.
+   프레임워크·라이브러리 줄과 (Unknown Source) 는 흐리게 둔다 — 눌러도 열 게 없다.
+   줄 번호는 기기에 깔린 빌드 기준이다. 소스를 고친 뒤 다시 빌드하기 전이면 어긋날 수 있다. */
+const FRAME_RE = /\bat ([\w.$]+)\(([\w$-]+\.(?:java|kt)):(\d+)\)/g;
+const FRAMEWORK = /^(android|androidx|java|javax|kotlin|kotlinx|dalvik|sun|libcore|com\.android|com\.google\.android|org\.jetbrains|okhttp3|retrofit2)\./;
+
+function withFrames(text) {
+  if (!state.cfg.eventSource) return esc(text);
+  let out = '';
+  let last = 0;
+  for (const m of text.matchAll(FRAME_RE)) {
+    out += esc(text.slice(last, m.index));
+    const [whole, cls, file, line] = m;
+    const segs = cls.split('.');
+    const pkg = segs.slice(0, -2).join('.');   // 끝의 두 조각은 클래스와 메서드
+    if (FRAMEWORK.test(cls)) {
+      out += `<span class="frame dim">${esc(whole)}</span>`;
+    } else {
+      out += `<button class="frame" data-pkg="${esc(pkg)}" data-file="${esc(file)}" data-line="${line}" ` +
+             `title="이 줄의 앱 코드 열기 · 줄 번호는 기기에 깔린 빌드 기준 (소스를 고쳤다면 다시 빌드 전엔 어긋날 수 있음)">` +
+             `${esc(whole)}</button>`;
+    }
+    last = m.index + whole.length;
+  }
+  return out + esc(text.slice(last));
+}
+
+async function gotoFrame(b, x, y) {
+  const q = `pkg=${encodeURIComponent(b.dataset.pkg)}&file=${encodeURIComponent(b.dataset.file)}`;
+  let r;
+  try { r = await (await fetch(`/api/frames/where?${q}`)).json(); }
+  catch (_) { toast('서버 응답 없음 — 뷰어 서버를 재시작해야 할 수 있습니다', true); return; }
+  if (r.error) { toast(r.error, true); return; }
+  const open = async (i) => {
+    const res = await fetch(`/api/frames/open?${q}&line=${b.dataset.line}&i=${i}`, { method: 'POST' }).catch(() => null);
+    const d = res ? await res.json().catch(() => ({})) : {};
+    toast(res && res.ok ? `열었습니다 · ${b.dataset.file}:${b.dataset.line}` : `못 열었습니다: ${d.error || '서버 응답 없음'}`,
+          !(res && res.ok));
+  };
+  if (!r.files.length) { toast(`${b.dataset.file} 는 앱 소스에 없습니다 (라이브러리 코드일 수 있음)`, true); return; }
+  if (r.files.length === 1) { open(0); return; }
+  showMenu(`${b.dataset.file}:${b.dataset.line} — 같은 이름 파일 ${r.files.length}곳`,
+           r.files.map((f, i) => ({ label: f, sub: '소스 세트가 여럿이면 같은 파일이 여러 곳에 있을 수 있음', pick: () => open(i) })),
+           x, y);
+}
+
+/* 후보 메뉴. 이벤트·스택 줄 모두 이걸 쓴다. 로그 목록 밖에 떠서 다시 그리기에 닫히지 않는다. */
+let menuItems = [];
+function showMenu(title, items, x, y) {
+  menuItems = items;
+  const m = $('gotoMenu');
+  m.innerHTML = `<div class="gmhead">${esc(title)}</div>` +
+    items.map((it, i) => `<button class="gcand" data-i="${i}"><b>${esc(it.label)}</b><span>${esc(it.sub || '')}</span></button>`).join('');
+  m.hidden = false;
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(x - w + 20, window.innerWidth - w - 8)) + 'px';
+  m.style.top = Math.max(8, Math.min(y + 12, window.innerHeight - h - 8)) + 'px';
+}
+
+/* ── 로그 → 코드 줄 ────────────────────────────────── */
+/* 서버가 누를 때마다 소스를 새로 읽어 후보를 낸다 (소스를 고쳐 줄이 밀려도 맞게).
+   후보가 하나면 바로 열고, 여럿이면 고르게 한다. 한 곳으로 단정하지 않는다. */
+async function gotoEvent(evt, x, y) {
+  toast(`${evt} 찾는 중…`);
+  let r;
+  try {
+    const res = await fetch(`/api/events/where?event=${encodeURIComponent(evt)}`);
+    r = await res.json();
+  } catch (_) {
+    toast('서버 응답 없음 — 뷰어 서버가 이 기능보다 오래된 버전이면 재시작해야 합니다', true);
+    return;
+  }
+  if (r.error) { toast(r.error, true); return; }
+  if (!r.targets.length) { toast(`${evt} 를 찍는 코드를 소스에서 찾지 못했습니다`, true); return; }
+  if (r.targets.length === 1) { openEvent(evt, 0); return; }
+  toast('');
+  showMenu(`${evt} — 후보 ${r.targets.length}곳`,
+           r.targets.map((t, i) => ({ label: t.where.split('/').pop(), sub: t.via, pick: () => openEvent(evt, i) })),
+           x, y);
+}
+
+async function openEvent(evt, i) {
+  $('gotoMenu').hidden = true;
+  const res = await fetch(`/api/events/open?event=${encodeURIComponent(evt)}&i=${i}`, { method: 'POST' })
+    .catch(() => null);
+  const d = res ? await res.json().catch(() => ({})) : {};
+  toast(res && res.ok ? `열었습니다 · ${String(d.where || '').split('/').pop()}` : `못 열었습니다: ${d.error || '서버 응답 없음'}`,
+        !(res && res.ok));
+}
+
+let toastTimer = 0;
+function toast(msg, bad) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.toggle('bad', !!bad);
+  t.hidden = !msg;
+  clearTimeout(toastTimer);
+  if (msg) toastTimer = setTimeout(() => { t.hidden = true; }, 3000);
 }
 
 /* ── 내보내기 ──────────────────────────────────────── */
@@ -1032,8 +1794,12 @@ function fmtDetail(v) {
 }
 
 function closeTop() {
+  if (!$('gotoMenu').hidden) { $('gotoMenu').hidden = true; return; }
+  if (!$('sessMenu').hidden) { $('sessMenu').hidden = true; return; }
   if (!$('det').hidden) { $('det').hidden = true; return; }
   if (!$('tbl').hidden) { $('tbl').hidden = true; return; }
+  if (!$('flw').hidden) { $('flw').hidden = true; return; }
+  if (!$('evw').hidden) { $('evw').hidden = true; return; }
   if (!$('dash').hidden) $('dash').hidden = true;
 }
 
