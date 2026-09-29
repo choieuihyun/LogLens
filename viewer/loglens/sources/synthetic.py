@@ -95,21 +95,40 @@ class SyntheticSource(LogSource):
         return self._line(level, f"{self.prefix}_{domain}", body)
 
     # -- 시나리오 -------------------------------------------------------------
-    def _login_flow(self) -> List[str]:
+    def _login_flow(self) -> list:
+        """로그인 한 번. 단계 사이에 실제 같은 간격을 둔다 (흐름 타임라인이 의미를 갖도록).
+
+        반환 목록의 항목은 두 종류다: 초(float) = 그만큼 쉰다, 함수 = 부르는 시점의 시각으로 한 줄.
+        줄을 미리 만들어 두면 시각이 전부 같아져 단계 간격이 0ms 로 찍힌다.
+        """
         fid = f"f{self._run}{next(self._flow)}"
         uid = self.rnd.randint(100, 999)
         # 어디까지 진행되는지 — 뒤로 갈수록 이탈이 줄어드는 현실적인 퍼널
         depth = self.rnd.choices([1, 2, 3, 4, 5], weights=[4, 6, 8, 10, 62])[0]
-        out = []
+        # 단계마다 평소 간격(ms). 가끔 한 단계가 크게 느려진다 (기준선 비교 데모용)
+        gap = {"CREDENTIAL_CHECK": (30, 80), "TOKEN_ISSUE": (90, 220),
+               "PROFILE_FETCH": (120, 280), "LOGIN_OK": (40, 110)}
+        slow = self.rnd.choice(list(gap)) if self.rnd.random() < 0.15 else None
+        out: list = []
         for i, step in enumerate(LOGIN_FUNNEL[:depth]):
-            out.append(self._evt("I", "AUTH", step, f"flowId={fid} uid={uid}"))
+            if step in gap:
+                lo, hi = gap[step]
+                ms = self.rnd.randint(lo, hi) * (self.rnd.randint(5, 9) if step == slow else 1)
+                out.append(ms / 1000.0)
+            out.append(lambda step=step: self._evt("I", "AUTH", step, f"flowId={fid} uid={uid}"))
             if i == 0 and depth > 1:
+                out.append(0.05)
                 out += self._rules(fid)
         if depth < len(LOGIN_FUNNEL):
             reason = self.rnd.choice(["WRONG_PW", "NETWORK", "LOCKED", "EXPIRED"])
-            out.append(self._evt("W", "AUTH", "LOGIN_FAIL",
-                                 f"flowId={fid} uid={uid} reason={reason}",
-                                 "로그인 실패"))
+            out.append(self.rnd.randint(200, 600) / 1000.0)
+            if reason == "NETWORK":
+                # 실패 직전 시스템 쪽 에러 — 타임라인이 "그 시간대에 끼어 있던 로그" 로 보여준다
+                out.append(lambda: self._line("E", "OkHttp",
+                                              "java.net.SocketTimeoutException: timeout"))
+            out.append(lambda: self._evt("W", "AUTH", "LOGIN_FAIL",
+                                         f"flowId={fid} uid={uid} reason={reason}",
+                                         "로그인 실패"))
         return out
 
     def _rules(self, fid: str) -> List[str]:
@@ -125,10 +144,12 @@ class SyntheticSource(LogSource):
         # 가끔 서버가 형식이 틀린 값을 내려준다 (숫자 자리에 단위가 붙음) — 형식 검사 데모용
         items = [(c, "100MB" if c == "FEAT_FILE_1" and self.rnd.random() < 0.3 else v1, v2)
                  for c, v1, v2 in items]
-        out = [self._evt("D", "AUTH", "RULE_ITEM", f"flowId={fid} code={c} value1={v1} value2={v2}")
+        # 줄은 쓰는 순간 만든다. 미리 만들면 시각이 앞 단계보다 이르게 찍힌다.
+        out = [(lambda c=c, v1=v1, v2=v2: self._evt(
+                    "D", "AUTH", "RULE_ITEM", f"flowId={fid} code={c} value1={v1} value2={v2}"))
                for c, v1, v2 in items]
-        out.append(self._evt("I", "AUTH", "RULE_SUMMARY", f"flowId={fid} count={len(items)}",
-                             "서버 설정 수신 완료"))
+        out.append(lambda: self._evt("I", "AUTH", "RULE_SUMMARY", f"flowId={fid} count={len(items)}",
+                                     "서버 설정 수신 완료"))
         return out
 
     def _chat(self) -> List[str]:
@@ -224,10 +245,15 @@ class SyntheticSource(LogSource):
         yield marker("합성 로그 생성기 — 기기 불필요 (데모 모드)")
         emitted = 0
         while not self.stopped:
-            for ln in self._next_batch():
+            for item in self._next_batch():
                 if self.stopped:
                     return
-                yield ln
+                if isinstance(item, float):
+                    # 초기 버스트 중에는 쉬지 않는다
+                    if not (self.burst and emitted < self.burst) and self._stop.wait(item):
+                        return
+                    continue
+                yield item() if callable(item) else item
                 emitted += 1
             if self.burst and emitted < self.burst:
                 continue                       # 초기 버스트는 지연 없이

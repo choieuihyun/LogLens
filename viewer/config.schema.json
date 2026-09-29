@@ -450,6 +450,77 @@
     "snapshotDir": {
       "type": "string",
       "description": "표 묶음을 파일로 남길 폴더(예: ~/.loglens/snapshots/my-app). 비우면 남기지 않는다. 남기면 뷰어를 다시 켜도 지난 묶음과 비교할 수 있다."
+    },
+    "eventSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "open"
+      ],
+      "description": "로그 한 줄 → 그 로그를 만든 코드 줄. 로그 줄의 ↗ 를 누르면 뷰어 서버가 open 명령으로 연다. 도우미 메서드로 감싼 경우 호출부까지 한 단계 따라간다.",
+      "properties": {
+        "root": {
+          "type": "string",
+          "description": "앱 소스 루트"
+        },
+        "open": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "여는 명령 인자 목록. {abs} {path} {line} 을 채운다. 예: [\"/Applications/Android Studio.app/Contents/MacOS/studio\", \"--line\", \"{line}\", \"{abs}\"]"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "찍는 호출에서 이벤트 이름을 잡는 정규식(캡처그룹 1). 비우면 LogLens.i(도메인, \"이벤트\", …)"
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "*.java",
+            "*.kt"
+          ]
+        }
+      }
+    },
+    "flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "흐름 타임라인. 같은 값을 가진 로그를 한 흐름으로 잇는다.",
+      "properties": {
+        "field": {
+          "type": "string",
+          "default": "flowId",
+          "description": "흐름을 잇는 필드"
+        },
+        "labelField": {
+          "type": "string",
+          "default": "uid",
+          "description": "흐름 이름으로 보여줄 필드"
+        }
+      }
+    },
+    "naming": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "이벤트 사전의 이름 검사.",
+      "properties": {
+        "synonyms": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2
+          },
+          "description": "같은 뜻인데 이름이 다른 필드 묶음(예: [\"uid\", \"userId\"]). 대소문자·밑줄만 다른 것은 적지 않아도 잡는다."
+        }
+      }
     }
   }
 }

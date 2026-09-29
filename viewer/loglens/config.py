@@ -301,6 +301,13 @@ class Config:
     buffer_size: int = 20000
     # 표 묶음을 파일로 남길 곳. 비우면 남기지 않는다 (버퍼가 비워지면 사라진다).
     snapshot_dir: Optional[str] = None
+    # 로그 한 줄 → 그 로그를 만든 코드 줄. {"root", "open": [명령 인자], "pattern"?, "include"?}
+    # pattern 을 비우면 LogLens 호출(LogLens.i(도메인, "이벤트", ...))로 찾는다.
+    event_source: Dict[str, object] = field(default_factory=dict)
+    # 흐름을 잇는 필드와 이름으로 쓸 필드. 기본 {"field": "flowId", "labelField": "uid"}
+    flow: Dict[str, str] = field(default_factory=dict)
+    # 이름 검사에 쓸 동의어 묶음. 표기로는 못 잡는 것(uid / userId)만 적는다. 기본은 비어 있다.
+    synonyms: List[List[str]] = field(default_factory=list)
     tabs: List[Tab] = field(default_factory=list)
     issue_rules: List[IssueRule] = field(default_factory=list)
     funnels: List[Funnel] = field(default_factory=list)
@@ -322,6 +329,10 @@ class Config:
             package=d.get("package"),
             buffer_size=int(d.get("bufferSize", 20000)),
             snapshot_dir=d.get("snapshotDir"),
+            event_source=d.get("eventSource") or {},
+            flow=d.get("flow") or {},
+            synonyms=[list(map(str, g)) for g in ((d.get("naming") or {}).get("synonyms") or [])
+                      if isinstance(g, list)],
             tabs=[Tab(id=t["id"], label=t.get("label", t["id"]),
                       domains=t.get("domains", []),
                       legacy_tag_pattern=t.get("legacyTagPattern"))
@@ -371,6 +382,10 @@ class Config:
         return {
             "prefix": self.prefix,
             "snapshots": bool(self.snapshot_dir),
+            "flow": {"field": (self.flow or {}).get("field") or "flowId",
+                     "labelField": (self.flow or {}).get("labelField") or "uid"},
+            # 명령·경로는 브라우저로 보내지 않는다. 쓸 수 있는지만 알린다.
+            "eventSource": bool(self.event_source.get("root") and self.event_source.get("open")),
             "package": self.package,
             "tabs": [t.to_dict() for t in self.tabs],
             "issueRules": [r.to_dict() for r in self.issue_rules],

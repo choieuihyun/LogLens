@@ -11,6 +11,9 @@ from typing import Iterator
 
 from .base import LogSource, marker
 
+# 세션 파일(.loglens)의 첫 줄. 뷰어가 내보낼 때 붙이고, 읽을 때 건너뛴다.
+SESSION_HEADER = "#loglens-session "
+
 
 class FileSource(LogSource):
     name = "file"
@@ -35,6 +38,8 @@ class FileSource(LogSource):
             for line in fh:
                 if self.stopped:
                     return
+                if line.startswith(SESSION_HEADER):
+                    continue                  # 세션 파일(.loglens)의 설명 줄은 로그가 아니다
                 yield line.rstrip("\n")
                 if self.delay:
                     if self._stop.wait(self.delay):
