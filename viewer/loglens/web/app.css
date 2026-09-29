@@ -80,25 +80,31 @@ main{flex:1; display:flex; min-height:0}
   flex:1; overflow-y:auto; overflow-x:hidden; padding:4px 0;
   font-family:var(--mono); font-size:12px;
 }
+/* 한 줄 = 고정 열 넷(시각·레벨·도메인·이벤트) + 필드 열. 폭은 app.js 가 --w-* 로 준다 */
 .row{
-  display:flex; gap:8px; padding:2px 12px; align-items:baseline;
-  border-left:2px solid transparent; white-space:pre-wrap; word-break:break-word;
+  display:grid; column-gap:10px; padding:2px 12px; align-items:baseline;
+  grid-template-columns:12ch 1ch var(--w-dom, 8ch) var(--w-evt, 14ch) minmax(0, 1fr);
+  border-left:2px solid transparent; white-space:pre-wrap; overflow-wrap:anywhere;
 }
+.row.raw .body{ grid-column:1 / -1 }
+.row .tag{ grid-column:3 / span 2 }
+.fs{ display:flex; flex-wrap:wrap; column-gap:2ch; align-items:baseline; min-width:0 }
 .row:hover{background:var(--bg2)}
 .row.lv-E{border-left-color:var(--e); background:rgba(248,113,113,.05)}
 .row.lv-W{border-left-color:var(--w)}
 .row.raw{color:var(--dim2)}
-.ts{color:var(--dim2); flex:0 0 auto; font-size:11px}
-.lvl{flex:0 0 auto; width:10px; font-weight:700}
+.ts{color:var(--dim2); font-size:11px}
+.lvl{font-weight:700}
 .lv-V .lvl{color:var(--v)} .lv-D .lvl{color:var(--d)} .lv-I .lvl{color:var(--i)}
 .lv-W .lvl{color:var(--w)} .lv-E .lvl{color:var(--e)}
 .dom{
-  flex:0 0 auto; color:var(--accent2); background:rgba(139,92,246,.12);
+  justify-self:start; color:var(--accent2); background:rgba(139,92,246,.12);
   border-radius:3px; padding:0 5px; font-size:11px;
 }
-.tag{flex:0 0 auto; color:var(--dim); font-size:11px}
-.evt{flex:0 0 auto; color:#e2e8f0; font-weight:700}
-.f{color:var(--dim); flex:0 0 auto}
+.tag{color:var(--dim); font-size:11px}
+.evt{color:#e2e8f0; font-weight:700}
+.f{color:var(--dim); flex:0 0 auto; min-width:0}
+.msg{flex:1 1 20ch}
 .f b{color:#93c5fd; font-weight:400}
 .f.masked b{color:var(--w)}
 .msg{color:var(--fg); opacity:.85}

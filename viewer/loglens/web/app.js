@@ -273,7 +273,10 @@ function render() {
 
   const slice = shown.slice(-MAX_RENDER);
   const logs = $('logs');
-  logs.innerHTML = slice.map(rowHtml).join('');
+  const cols = columnWidths(slice);
+  logs.style.setProperty('--w-dom', cols.dom + 2 + 'ch');   // 배지 좌우 여백만큼
+  logs.style.setProperty('--w-evt', cols.evt + 'ch');
+  logs.innerHTML = slice.map((r) => rowHtml(r, cols)).join('');
   if (state.autoscroll) logs.scrollTop = logs.scrollHeight;
 }
 
@@ -395,19 +398,51 @@ function nodeHtml(n) {
     </div>${sub}`;
 }
 
-function rowHtml(r) {
+/* 세로줄 맞추기. 줄마다 폭이 제각각이면 같은 필드가 매번 다른 자리에 찍혀 눈으로 훑을 수가 없다.
+   도메인·이벤트 열은 화면 전체에서, 필드 열은 같은 이벤트끼리 폭을 맞춘다.
+   폭은 지금 그리는 줄 중 가장 긴 값 — 상한을 넘는 값은 자기 칸 안에서 접힌다. */
+const DOM_MAX_CH = 12;
+const EVT_MAX_CH = 24;
+const FIELD_MAX_CH = 40;
+
+function columnWidths(rows) {
+  const cols = { dom: 4, evt: 6, byEvt: new Map() };
+  for (const r of rows) {
+    if (r.kind !== 'structured') continue;
+    cols.dom = Math.max(cols.dom, Math.min(String(r.domain || '').length, DOM_MAX_CH));
+    cols.evt = Math.max(cols.evt, Math.min(String(r.event || '').length, EVT_MAX_CH));
+    let w = cols.byEvt.get(r.event);
+    if (!w) cols.byEvt.set(r.event, (w = new Map()));
+    for (const [k, v] of Object.entries(r.fields || {})) {
+      const n = Math.min(k.length + 1 + String(v ?? '').length, FIELD_MAX_CH);
+      if (n > (w.get(k) || 0)) w.set(k, n);
+    }
+  }
+  return cols;
+}
+
+function rowHtml(r, cols) {
   const cls = `row lv-${r.level}` + (r.kind === 'raw' ? ' raw' : '');
-  const ts = r.ts ? `<span class="ts">${esc(shortTs(r.ts))}</span>` : '';
+  // 시각이 없는 줄도 칸은 비워 둔다. 빼면 뒤 열이 전부 한 칸씩 당겨진다.
+  const ts = `<span class="ts">${r.ts ? esc(shortTs(r.ts)) : ''}</span>`;
   const lvl = `<span class="lvl">${r.level}</span>`;
 
   if (r.kind === 'structured') {
-    const fields = Object.entries(r.fields || {})
-      .map(([k, v]) => `<span class="f${isMasked(v) ? ' masked' : ''}">${esc(k)}=<b>${esc(v)}</b></span>`)
-      .join(' ');
+    const widths = (cols && cols.byEvt.get(r.event)) || new Map();
+    const entries = Object.entries(r.fields || {});
+    const fields = entries
+      .map(([k, v], i) => {
+        const w = widths.get(k);
+        // 마지막 필드는 남는 폭을 다 쓴다. 긴 URL 이 좁은 칸에서 여러 줄로 접히지 않게.
+        const last = i === entries.length - 1 && !r.msg;
+        const style = w ? ` style="flex:${last ? 1 : 0} 0 ${w}ch"` : '';
+        return `<span class="f${isMasked(v) ? ' masked' : ''}"${style}>${esc(k)}=<b>${esc(v)}</b></span>`;
+      })
+      .join('');
     const msg = r.msg ? `<span class="msg">| ${esc(r.msg)}</span>` : '';
     const cut = r.truncated ? '<span class="cut">[cut]</span>' : '';
     return `<div class="${cls}">${ts}${lvl}<span class="dom">${esc(r.domain)}</span>` +
-           `<span class="evt">${esc(r.event)}</span>${fields}${msg}${cut}</div>`;
+           `<span class="evt">${esc(r.event)}</span><span class="fs">${fields}${msg}${cut}</span></div>`;
   }
   if (r.kind === 'unstructured') {
     return `<div class="${cls}">${ts}${lvl}<span class="tag">${esc(r.tag)}</span>` +
