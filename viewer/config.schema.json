@@ -281,6 +281,175 @@
           }
         }
       }
+    },
+    "tables": {
+      "type": "array",
+      "description": "목록처럼 쏟아지는 로그(서버 설정 항목 등)를 묶음별 표로 모으는 규칙. 로그 목록에서는 묶음마다 한 줄로 접히고, 누르면 표와 묶음 비교가 열린다.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "domain",
+          "events"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_]+$"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "표로 묶을 이벤트"
+          },
+          "key": {
+            "type": "string",
+            "default": "code",
+            "description": "행을 가르는 필드. 한 묶음 안에서 같은 값이 여러 번 나와도 된다. 비교는 이 필드 단위로 한다."
+          },
+          "groupBy": {
+            "type": "string",
+            "description": "한 묶음을 가르는 필드(예: flowId). 없으면 전부 한 묶음."
+          },
+          "countEvent": {
+            "type": "string",
+            "description": "앱이 '몇 개 보냈다'를 찍는 이벤트(예: RULE_SUMMARY). 묶음이 다 남아 있는지 판단하는 근거."
+          },
+          "countField": {
+            "type": "string",
+            "description": "countEvent 에서 개수가 든 필드(예: count)"
+          },
+          "catalog": {
+            "type": "array",
+            "description": "앱이 처리하도록 구현해 둔 key 목록. 목록에 있는데 이번 묶음에 안 들어온 것은 꺼진 상태로 보인다. 값 유무와 무관하게 '들어왔나'를 본다.",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "code"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "화면에 같이 보일 이름"
+                    },
+                    "note": {
+                      "type": "string",
+                      "description": "상세 창에 보일 메모 (예: 값 없이 수신만으로 동작)"
+                    },
+                    "type": {
+                      "enum": [
+                        "int",
+                        "bool",
+                        "url",
+                        "json",
+                        "kv"
+                      ],
+                      "description": "값의 기대 형식. 다르면 문제로 표시한다"
+                    },
+                    "pattern": {
+                      "type": "string",
+                      "description": "값이 통째로 맞아야 하는 정규식"
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "K=V 목록에 있어야 할 키"
+                    },
+                    "field": {
+                      "type": "string",
+                      "default": "value1",
+                      "description": "검사할 필드"
+                    },
+                    "required": {
+                      "type": "boolean",
+                      "description": "비어 있으면(-) 문제로 본다. 기본은 비어 있어도 괜찮다 — 들어오기만 해도 동작하는 항목이 있다"
+                    },
+                    "where": {
+                      "type": "string",
+                      "description": "앱 소스 위치(파일:줄). 보통 catalogSource 가 채운다"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "labelFrom": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "event",
+              "field"
+            ],
+            "description": "묶음을 사람이 알아볼 이름으로 부른다. 같은 묶음 값(groupBy)을 가진 다른 이벤트에서 필드를 읽는다(예: LOGIN_START 의 uid).",
+            "properties": {
+              "event": {
+                "type": "string"
+              },
+              "field": {
+                "type": "string"
+              }
+            }
+          },
+          "catalogSource": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "root",
+              "pattern"
+            ],
+            "description": "구현 목록을 앱 소스에서 뽑는 규칙. 뷰어가 뜰 때마다 다시 훑는다. 같은 줄의 // 주석을 이름으로 쓴다. 손으로 적은 catalog 는 그 위에 덮어쓴다.",
+            "properties": {
+              "root": {
+                "type": "string",
+                "description": "앱 소스 루트"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "캡처그룹 1 이 key 인 정규식. 예: \"(FEAT_[A-Z0-9_]+)\""
+              },
+              "include": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": [
+                  "*.java",
+                  "*.kt"
+                ],
+                "description": "훑을 파일 이름 글롭"
+              }
+            }
+          },
+          "sourceLink": {
+            "type": "string",
+            "description": "catalog 의 위치(파일:줄)를 여는 링크 틀. {abs} {path} {line} 을 채운다. 예: vscode://file{abs}:{line} ({abs} 가 / 로 시작한다)"
+          }
+        }
+      }
+    },
+    "snapshotDir": {
+      "type": "string",
+      "description": "표 묶음을 파일로 남길 폴더(예: ~/.loglens/snapshots/my-app). 비우면 남기지 않는다. 남기면 뷰어를 다시 켜도 지난 묶음과 비교할 수 있다."
     }
   }
 }

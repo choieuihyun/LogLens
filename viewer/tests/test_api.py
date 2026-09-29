@@ -33,6 +33,9 @@ CFG = Config.from_dict({
     ],
     "funnels": [{"id": "login", "label": "로그인", "domain": "AUTH",
                  "steps": ["LOGIN_OK", "LOGOUT"]}],
+    "tables": [{"id": "rules", "label": "서버 설정", "domain": "AUTH",
+                "events": ["RULE_ITEM"], "key": "code", "groupBy": "flowId",
+                "countEvent": "RULE_SUMMARY", "countField": "count"}],
 })
 
 
@@ -118,6 +121,41 @@ class TestApi(unittest.TestCase):
         f = d["funnels"][0]
         self.assertEqual(set(f), {"id", "label", "domain", "mode", "steps"})
         self.assertEqual(set(f["steps"][0]), {"event", "count", "dropoff"})
+
+    def test_tables_shape(self):
+        # 표 화면이 읽는 모양. 묶음은 SSE 테스트처럼 허브에 직접 밀어넣는다.
+        for flow, codes in (("tA", ["X", "Y"]), ("tB", ["Y", "Z"])):
+            for c in codes:
+                self.hub.ingest(f"08-12 12:00:00.000  1  1 D APP_AUTH: evt=RULE_ITEM "
+                                f"flowId={flow} code={c} value1=1 value2=-")
+        self.hub.ingest("08-12 12:00:00.000  1  1 I APP_AUTH: evt=RULE_SUMMARY flowId=tA count=2")
+        code, d = self.get("/api/tables")
+        self.assertEqual(code, 200)
+        t = d[0]
+        for k in ("id", "label", "key", "groupBy", "columns", "groups"):
+            self.assertIn(k, t)
+        g = next(x for x in t["groups"] if x["id"] == "tA")
+        for k in ("id", "firstTs", "lastTs", "count", "expected", "complete", "rows",
+                  "label", "problemCount"):
+            self.assertIn(k, g)
+        self.assertEqual(set(g["rows"][0]), {"ts", "key", "values", "raw", "problems"})
+        self.assertIs(g["complete"], True)
+
+        code, d = self.get("/api/tables/diff?table=rules&a=tA&b=tB")
+        self.assertEqual(code, 200)
+        for k in ("a", "b", "columns", "aComplete", "bComplete", "summary", "rows"):
+            self.assertIn(k, d)
+        self.assertEqual(d["summary"], {"added": 1, "removed": 1, "changed": 0, "same": 1})
+        self.assertEqual(set(d["rows"][0]), {"key", "status", "a", "b", "common"})
+
+    def test_table_diff_missing_group_is_404_not_500(self):
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            self.raw("/api/tables/diff?table=rules&a=nope&b=nada")
+        self.assertEqual(cm.exception.code, 404)
+
+    def test_config_carries_tables(self):
+        _, d = self.get("/api/config")
+        self.assertEqual(d["tables"][0]["groupBy"], "flowId")
 
     def test_json_is_utf8_not_escaped(self):
         _, body = self.raw("/api/snapshot?limit=100")

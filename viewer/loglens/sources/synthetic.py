@@ -33,6 +33,25 @@ ORG_TREE = {
     "N12":  [("N121", "국내영업"), ("N122", "해외영업")],
 }
 
+# 로그인 직후 서버가 내려주는 설정 목록. 항목 하나당 한 줄로 찍힌다 (한 줄에 다 넣으면 4KB 에 잘린다).
+# 같은 코드가 여러 번 나오고(FEAT_OPT), 값 안에 구조가 들어 있는(K=V 목록, JSON) 실제 모양을 흉내낸다.
+# 표 화면과 묶음 비교를 데모하려는 것이라 로그인마다 조금씩 달라진다.
+RULE_ITEMS = [
+    ("FEAT_CHAT_1", "MAX=200", "-"),
+    ("FEAT_CHAT_2", "INVITE=TRUE,JOIN=TRUE,LEAVE=TRUE", "-"),
+    ("FEAT_FILE_1", "100", "-"),
+    ("FEAT_FILE_2", "doc,pdf,png,jpg,zip", "-"),
+    ("FEAT_ORG_1", "demo", "조직도"),
+    ("FEAT_URL_1", "https://app.example.test/notice", "UM=GET,WD=350,HG=620"),
+    ("FEAT_UI_1", '{"view":{"compact":true,"avatar":false},"tabs":["chat","org"]}', "-"),
+    ("FEAT_OPT", "TYPE=INTEGER,SECTION=chat,IDENT=new_line,VALUE=1", "-"),
+    ("FEAT_OPT", "TYPE=INTEGER,SECTION=option,IDENT=search_recv,VALUE=1", "-"),
+    ("FEAT_OPT", "TYPE=STRING,SECTION=remote,IDENT=host,VALUE=relay.example.test", "-"),
+    ("FEAT_STATE_1", "자리_비움", "VISIBLE=TRUE"),
+    ("FEAT_EMPTY_1", "-", "-"),
+    ("FEAT_EMPTY_2", "-", "-"),
+]
+
 CRASH_STACK = [
     ("E", "AndroidRuntime", "FATAL EXCEPTION: main"),
     ("E", "AndroidRuntime", "Process: io.loglens.sample, PID: %d" % PID),
@@ -59,6 +78,8 @@ class SyntheticSource(LogSource):
         self.rnd = random.Random(seed)
         self.burst = burst       # >0 이면 이만큼 즉시 뿜고 실시간 모드로 전환
         self._flow = itertools.count(1000)
+        # 실행마다 다른 접두어. 스냅샷을 켜 두면 재시작 후 같은 flowId 가 옛 묶음을 덮어쓴다.
+        self._run = format(int(time.time()) % 4096, "03x")
 
     # -- 한 줄 조립 -----------------------------------------------------------
     def _line(self, level: str, tag: str, body: str, tid: int = PID) -> str:
@@ -75,18 +96,39 @@ class SyntheticSource(LogSource):
 
     # -- 시나리오 -------------------------------------------------------------
     def _login_flow(self) -> List[str]:
-        fid = f"f{next(self._flow)}"
+        fid = f"f{self._run}{next(self._flow)}"
         uid = self.rnd.randint(100, 999)
         # 어디까지 진행되는지 — 뒤로 갈수록 이탈이 줄어드는 현실적인 퍼널
         depth = self.rnd.choices([1, 2, 3, 4, 5], weights=[4, 6, 8, 10, 62])[0]
         out = []
-        for step in LOGIN_FUNNEL[:depth]:
+        for i, step in enumerate(LOGIN_FUNNEL[:depth]):
             out.append(self._evt("I", "AUTH", step, f"flowId={fid} uid={uid}"))
+            if i == 0 and depth > 1:
+                out += self._rules(fid)
         if depth < len(LOGIN_FUNNEL):
             reason = self.rnd.choice(["WRONG_PW", "NETWORK", "LOCKED", "EXPIRED"])
             out.append(self._evt("W", "AUTH", "LOGIN_FAIL",
                                  f"flowId={fid} uid={uid} reason={reason}",
                                  "로그인 실패"))
+        return out
+
+    def _rules(self, fid: str) -> List[str]:
+        """서버 설정 목록. 순서는 매번 섞이고, 가끔 값 하나가 바뀌거나 항목 하나가 빠진다."""
+        items = list(RULE_ITEMS)
+        self.rnd.shuffle(items)
+        if self.rnd.random() < 0.5:
+            items.pop(self.rnd.randrange(len(items)))
+        if self.rnd.random() < 0.5:
+            items.append(("FEAT_NEW_1", "ON", "-"))
+        items = [(c, "MAX=500" if c == "FEAT_CHAT_1" and self.rnd.random() < 0.5 else v1, v2)
+                 for c, v1, v2 in items]
+        # 가끔 서버가 형식이 틀린 값을 내려준다 (숫자 자리에 단위가 붙음) — 형식 검사 데모용
+        items = [(c, "100MB" if c == "FEAT_FILE_1" and self.rnd.random() < 0.3 else v1, v2)
+                 for c, v1, v2 in items]
+        out = [self._evt("D", "AUTH", "RULE_ITEM", f"flowId={fid} code={c} value1={v1} value2={v2}")
+               for c, v1, v2 in items]
+        out.append(self._evt("I", "AUTH", "RULE_SUMMARY", f"flowId={fid} count={len(items)}",
+                             "서버 설정 수신 완료"))
         return out
 
     def _chat(self) -> List[str]:

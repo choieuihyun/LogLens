@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
 from dataclasses import dataclass, field
@@ -174,6 +175,106 @@ class Tree:
 
 
 @dataclass
+class Table:
+    """목록처럼 쏟아지는 로그를 표로 묶는 규칙.
+
+    서버 설정 목록처럼 한 번에 수십~수백 개가 오는 데이터는 앱이 항목 하나당 한 줄로 찍는다.
+    한 줄에 통째로 찍으면 logcat 의 4KB 제한에 잘리기 때문이다. 전송은 그게 맞지만
+    로그 목록에서 보면 흐름이 전부 묻힌다. 그래서 같은 묶음(groupBy)끼리 모아 표로 보여준다.
+
+    key 는 행을 가르는 필드다. 한 묶음 안에서 같은 key 가 여러 번 나올 수 있고
+    (같은 코드에 값이 여럿), 순서도 매번 다르다. 비교가 줄 단위가 아니라 key 단위인 이유다.
+    """
+    id: str
+    label: str
+    domain: str
+    events: List[str] = field(default_factory=list)
+    key: str = "code"
+    # 한 묶음을 가르는 필드 (예: flowId). 없으면 전부 한 묶음이다.
+    group_by: Optional[str] = None
+    # 묶음이 다 왔는지 판단할 근거. 앱이 "몇 개 보냈다" 를 따로 찍어 주면 그 이벤트와 필드.
+    # 링 버퍼가 오래된 묶음의 앞부분을 밀어냈을 때 비교가 가짜 "삭제" 를 내지 않게 한다.
+    count_event: Optional[str] = None
+    count_field: Optional[str] = None
+    # 앱이 처리하도록 구현해 둔 key 목록. 들어왔는지만으로 동작하는 항목이 있어서
+    # "값이 있나" 가 아니라 "들어왔나" 를 봐야 한다. 목록에 있는데 안 들어온 것을 꺼진 상태로 보여준다.
+    # 항목은 "CODE" 문자열 또는 {"code": ..., "name": ..., "note": ..., 검사 키들}.
+    # 검사 키: type(int|bool|url|json|kv) / pattern(정규식) / keys(kv 에 있어야 할 키) /
+    #          field(검사할 필드, 기본 value1) / required(비어 있으면 문제로 본다)
+    catalog: List[Dict[str, object]] = field(default_factory=list)
+    # 구현 목록을 앱 소스에서 뽑는 규칙. 손으로 적은 catalog 는 그 위에 덮어쓴다 (이름·검사 키 보강용).
+    # {"root": 소스 루트, "pattern": 캡처그룹 1이 key 인 정규식, "include": ["*.java", "*.kt"]}
+    catalog_source: Dict[str, object] = field(default_factory=dict)
+    # 묶음을 사람이 알아볼 이름으로 부른다. 같은 묶음 값을 가진 다른 이벤트에서 필드를 읽는다.
+    # {"event": "LOGIN_START", "field": "uid"} — flowId 대신 계정으로 묶음을 고를 수 있다.
+    label_from: Dict[str, str] = field(default_factory=dict)
+    # catalog 의 where(파일:줄)를 여는 링크 틀. {abs} {path} {line} 을 채운다.
+    # 예: "vscode://file{abs}:{line}" ({abs} 가 / 로 시작하므로 file 뒤에 / 를 붙이지 않는다)
+    source_link: Optional[str] = None
+    # catalog 의 where 를 뷰어 서버가 직접 여는 명령. 인자 목록이며 {abs} {path} {line} 을 채운다.
+    # 브라우저 링크(sourceLink)로는 편집기를 못 고를 때 쓴다 (예: 같은 URL 스킴을 쓰는 IDE 가 여럿).
+    # 예: ["/Applications/Android Studio.app/Contents/MacOS/studio", "--line", "{line}", "{abs}"]
+    source_open: List[str] = field(default_factory=list)
+    catalog_manual: List[Dict[str, object]] = field(default_factory=list, repr=False)
+
+    def __post_init__(self):
+        self.catalog_manual = normalize_catalog(self.catalog)
+        self.catalog = [dict(c) for c in self.catalog_manual]
+
+    def matches(self, rec: Record) -> bool:
+        return (rec.kind == STRUCTURED and rec.domain == self.domain
+                and rec.event in self.events)
+
+    def count_matches(self, rec: Record) -> bool:
+        return (bool(self.count_event) and rec.kind == STRUCTURED
+                and rec.domain == self.domain and rec.event == self.count_event)
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "label": self.label, "domain": self.domain,
+                "events": self.events, "key": self.key, "groupBy": self.group_by,
+                "countEvent": self.count_event, "countField": self.count_field,
+                "catalog": self.catalog, "labelFrom": self.label_from or None,
+                "sourceRoot": self.source_root(), "sourceLink": self.source_link,
+                "sourceOpen": bool(self.source_open)}
+
+    def source_root(self) -> Optional[str]:
+        root = (self.catalog_source or {}).get("root")
+        return os.path.abspath(os.path.expanduser(str(root))) if root else None
+
+
+_CATALOG_KEYS = ("name", "note", "where", "type", "pattern", "keys", "field", "required")
+
+
+def normalize_catalog(items) -> List[Dict[str, object]]:
+    """catalog 항목을 한 모양으로. 모양이 틀린 항목은 버린다.
+
+    설정 오타 하나로 뷰어가 안 뜨면 안 된다. 그래서 예외 대신 버린다.
+    """
+    norm = []
+    for c in items or []:
+        if isinstance(c, str):
+            norm.append({"code": c, "name": None, "note": None})
+        elif isinstance(c, dict) and c.get("code"):
+            e = {"code": str(c["code"]), "name": c.get("name"), "note": c.get("note")}
+            for k in _CATALOG_KEYS:
+                if k in c and k not in e:
+                    e[k] = c[k]
+            norm.append(e)
+    return norm
+
+
+def merge_catalog(base: List[dict], over: List[dict]) -> List[dict]:
+    """소스에서 뽑은 목록(base) 위에 손으로 적은 목록(over)을 덮는다. 값이 있는 키만 덮는다."""
+    out = {c["code"]: dict(c) for c in base}
+    for c in over:
+        cur = out.setdefault(c["code"], {"code": c["code"], "name": None, "note": None})
+        for k, v in c.items():
+            if v is not None:
+                cur[k] = v
+    return list(out.values())
+
+
+@dataclass
 class Outcome:
     """이벤트 이름 접미사로 성공/실패를 판정한다 (기획서 §9-4 이름 거버넌스의 보상)."""
     success: List[str] = field(default_factory=lambda: ["_OK", "_SUCCESS", "_DONE"])
@@ -198,10 +299,13 @@ class Config:
     prefix: str = "APP"
     package: Optional[str] = None
     buffer_size: int = 20000
+    # 표 묶음을 파일로 남길 곳. 비우면 남기지 않는다 (버퍼가 비워지면 사라진다).
+    snapshot_dir: Optional[str] = None
     tabs: List[Tab] = field(default_factory=list)
     issue_rules: List[IssueRule] = field(default_factory=list)
     funnels: List[Funnel] = field(default_factory=list)
     trees: List[Tree] = field(default_factory=list)
+    tables: List[Table] = field(default_factory=list)
     outcome: Outcome = field(default_factory=Outcome)
 
     @staticmethod
@@ -217,6 +321,7 @@ class Config:
             prefix=d.get("prefix", "APP"),
             package=d.get("package"),
             buffer_size=int(d.get("bufferSize", 20000)),
+            snapshot_dir=d.get("snapshotDir"),
             tabs=[Tab(id=t["id"], label=t.get("label", t["id"]),
                       domains=t.get("domains", []),
                       legacy_tag_pattern=t.get("legacyTagPattern"))
@@ -236,6 +341,17 @@ class Config:
                         depth_field=x.get("depthField"),
                         scope=x.get("scope"), leaf=x.get("leaf", {}))
                    for x in d.get("trees", [])],
+            tables=[Table(id=x["id"], label=x.get("label", x["id"]),
+                          domain=x["domain"], events=x.get("events", []),
+                          key=x.get("key", "code"), group_by=x.get("groupBy"),
+                          count_event=x.get("countEvent"),
+                          count_field=x.get("countField"),
+                          catalog=x.get("catalog", []),
+                          catalog_source=x.get("catalogSource") or {},
+                          label_from=x.get("labelFrom") or {},
+                          source_link=x.get("sourceLink"),
+                          source_open=[str(a) for a in (x.get("sourceOpen") or [])])
+                    for x in d.get("tables", [])],
             outcome=Outcome(**{
                 "success": d.get("outcome", {}).get("success", Outcome().success),
                 "failure": d.get("outcome", {}).get("failure", Outcome().failure),
@@ -254,11 +370,13 @@ class Config:
     def to_dict(self) -> dict:
         return {
             "prefix": self.prefix,
+            "snapshots": bool(self.snapshot_dir),
             "package": self.package,
             "tabs": [t.to_dict() for t in self.tabs],
             "issueRules": [r.to_dict() for r in self.issue_rules],
             "funnels": [f.to_dict() for f in self.funnels],
             "trees": [x.to_dict() for x in self.trees],
+            "tables": [x.to_dict() for x in self.tables],
         }
 
 

@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections import Counter, OrderedDict
 from typing import Dict, List, Optional
 
@@ -376,3 +378,172 @@ def _max_depth(n: dict) -> int:
     if not n["children"]:
         return n.get("depth", 0)
     return max(_max_depth(c) for c in n["children"])
+
+
+# ── 표로 묶기 ────────────────────────────────────────────────────────────────
+# 목록처럼 쏟아지는 로그(서버 설정 항목 등)를 묶음별 표로 다시 세운다.
+# 한 묶음 안에서 같은 key 가 여러 번 나오고, 묶음마다 순서가 다르다는 것을 전제로 한다.
+
+_NO_GROUP = ""
+
+
+def build_table(records: List[Record], cfg_table) -> dict:
+    """설정의 표 규칙대로 레코드를 묶음별로 모은다.
+
+    묶음이 다 왔는지는 앱이 알려준 기대 개수(countEvent)로만 판단한다.
+    기대 개수를 모르면 complete 는 None 이다 — 다 왔다고 단정하지 않는다.
+    """
+    t = cfg_table
+    groups: "OrderedDict[str, dict]" = OrderedDict()
+    columns: List[str] = []
+    expected: Dict[str, int] = {}
+    labels: Dict[str, str] = {}
+    lf = t.label_from or {}
+    catalog = {c["code"]: c for c in (t.catalog or [])}
+
+    for rec in records:
+        # 묶음 이름: 같은 묶음 값을 가진 다른 이벤트(예: 로그인 시작)에서 읽는다
+        if (lf.get("event") and t.group_by and rec.kind == STRUCTURED
+                and rec.event == lf["event"] and t.group_by in rec.fields
+                and rec.fields.get(lf.get("field", ""))):
+            labels.setdefault(rec.fields[t.group_by], rec.fields[lf["field"]])
+        if t.count_matches(rec) and t.count_field:
+            gid = rec.fields.get(t.group_by, _NO_GROUP) if t.group_by else _NO_GROUP
+            try:
+                expected[gid] = int(rec.fields.get(t.count_field, ""))
+            except ValueError:
+                pass                     # 숫자가 아니면 모르는 것으로 둔다
+            continue
+        if not t.matches(rec):
+            continue
+        gid = rec.fields.get(t.group_by, _NO_GROUP) if t.group_by else _NO_GROUP
+        g = groups.get(gid)
+        if g is None:
+            g = groups[gid] = {"id": gid, "firstTs": rec.ts, "lastTs": rec.ts, "rows": []}
+        g["lastTs"] = rec.ts
+        values = {}
+        for k, v in rec.fields.items():
+            if k == t.key or k == t.group_by:
+                continue
+            if k not in columns:
+                columns.append(k)
+            values[k] = v
+        # raw 는 상세 화면에서 원본 줄을 그대로 보여주려고 싣는다. 파싱이 뭘 빠뜨렸는지 대조할 근거다.
+        key = rec.fields.get(t.key, "")
+        g["rows"].append({"ts": rec.ts, "key": key, "values": values, "raw": rec.raw,
+                          "problems": check_value(catalog.get(key), values)})
+
+    out = []
+    for gid, g in groups.items():
+        n = len(g["rows"])
+        exp = expected.get(gid)
+        g["count"] = n
+        g["expected"] = exp
+        g["complete"] = None if exp is None else n >= exp
+        g["label"] = labels.get(gid)
+        g["problemCount"] = sum(1 for r in g["rows"] if r["problems"])
+        out.append(g)
+    return {"id": t.id, "label": t.label, "key": t.key, "groupBy": t.group_by,
+            "columns": columns, "groups": out, "catalog": t.catalog}
+
+
+def diff_groups(a: dict, b: dict, columns: List[str]) -> dict:
+    """두 묶음을 key 단위로 비교한다.
+
+    한 key 에 값이 여럿일 수 있으므로 key 마다 값 튜플의 **개수까지** 센다 (Counter).
+    집합으로 비교하면 "같은 값이 두 번 → 한 번" 같은 변화가 사라진다.
+    순서는 비교에 쓰지 않는다. 같은 설정도 받을 때마다 순서가 다르게 온다.
+    """
+    def bag(g: dict) -> "OrderedDict[str, Counter]":
+        out: "OrderedDict[str, Counter]" = OrderedDict()
+        for r in g.get("rows", []):
+            tup = tuple(r["values"].get(c, "") for c in columns)
+            out.setdefault(r["key"], Counter())[tup] += 1
+        return out
+
+    ba, bb = bag(a), bag(b)
+    keys = list(bb.keys()) + [k for k in ba.keys() if k not in bb]
+    rows = []
+    summary = {"added": 0, "removed": 0, "changed": 0, "same": 0}
+    for k in keys:
+        ca, cb = ba.get(k), bb.get(k)
+        if ca is None:
+            status = "added"
+        elif cb is None:
+            status = "removed"
+        elif ca == cb:
+            status = "same"
+        else:
+            status = "changed"
+        summary[status] += 1
+        only_a = (ca or Counter()) - (cb or Counter())
+        only_b = (cb or Counter()) - (ca or Counter())
+        common = (ca or Counter()) & (cb or Counter())
+        rows.append({
+            "key": k,
+            "status": status,
+            "a": [dict(zip(columns, t)) for t in only_a.elements()],
+            "b": [dict(zip(columns, t)) for t in only_b.elements()],
+            "common": [dict(zip(columns, t)) for t in common.elements()],
+        })
+    # 둘 중 하나라도 다 왔는지 모르면 "삭제" 는 버퍼에서 밀려난 것일 수 있다. 판단은 화면이 알린다.
+    return {"a": a.get("id"), "b": b.get("id"), "columns": columns,
+            "aComplete": a.get("complete"), "bComplete": b.get("complete"),
+            "summary": summary, "rows": rows}
+
+
+# ── 값 형식 검사 ─────────────────────────────────────────────────────────────
+# catalog 에 기대 형식을 적어 두면 서버가 잘못 내려준 값을 잡는다.
+# 비어 있는 값은 문제로 보지 않는다 — 들어오기만 해도 동작하는 항목이 있다. required 일 때만 본다.
+
+_INT = re.compile(r"-?\d+")
+_BOOL = {"true", "false", "y", "n", "yes", "no", "0", "1", "on", "off"}
+_KV_PART = re.compile(r"^[A-Za-z0-9_.]+=")
+
+
+def check_value(entry: Optional[dict], values: Dict[str, str]) -> List[str]:
+    if not entry:
+        return []
+    fld = str(entry.get("field") or "value1")
+    v = values.get(fld)
+    if v in (None, "", "-"):
+        return [f"{fld} 가 비어 있음"] if entry.get("required") else []
+    probs = []
+    typ = entry.get("type")
+    if typ == "int" and not _INT.fullmatch(v):
+        probs.append(f"{fld} 가 정수가 아님")
+    elif typ == "bool" and v.lower() not in _BOOL:
+        probs.append(f"{fld} 가 참/거짓 값이 아님")
+    elif typ == "url" and not re.match(r"https?://", v):
+        probs.append(f"{fld} 가 URL 이 아님")
+    elif typ == "json" and loose_json(v) is None:
+        probs.append(f"{fld} 가 JSON 으로 안 읽힘")
+    elif typ == "kv" and not all(_KV_PART.match(p) for p in v.split(",")):
+        probs.append(f"{fld} 가 K=V 목록이 아님")
+    pat = entry.get("pattern")
+    if pat:
+        try:
+            if not re.fullmatch(str(pat), v):
+                probs.append(f"{fld} 가 패턴과 다름: {pat}")
+        except re.error:
+            probs.append(f"catalog 의 pattern 정규식 오류: {pat}")
+    keys = entry.get("keys")
+    if keys:
+        have = {p.split("=", 1)[0] for p in v.split(",") if "=" in p}
+        miss = [k for k in keys if k not in have]
+        if miss:
+            probs.append(f"{fld} 에 없는 키: {', '.join(miss)}")
+    return probs
+
+
+def loose_json(s: str):
+    """값 안의 공백이 _ 로 바뀐 JSON 을 읽는다. JSON 구분자 옆의 _ 만 걷어낸다 (app.js 와 같은 규칙)."""
+    loose = re.sub(r"([,:\[{])_", r"\1", re.sub(r"_(?=[,:\]}])", "", s))
+    for cand in (s, loose):
+        try:
+            o = json.loads(cand)
+            if isinstance(o, (dict, list)):
+                return o
+        except ValueError:
+            pass
+    return None

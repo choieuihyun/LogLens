@@ -139,5 +139,92 @@
       "childCount": "children",
       "depthField": "depth"
     }
+  ],
+  "tables": [
+    {
+      "id": "rules",
+      "label": "서버 설정",
+      "domain": "AUTH",
+      "events": [
+        "RULE_ITEM"
+      ],
+      "key": "code",
+      "groupBy": "flowId",
+      "countEvent": "RULE_SUMMARY",
+      "countField": "count",
+      "catalog": [
+        {
+          "code": "FEAT_CHAT_1",
+          "name": "채팅 최대 인원"
+        },
+        {
+          "code": "FEAT_CHAT_2",
+          "name": "채팅방 입퇴장 알림"
+        },
+        {
+          "code": "FEAT_FILE_1",
+          "name": "첨부 최대 크기(MB)",
+          "type": "int"
+        },
+        {
+          "code": "FEAT_FILE_2",
+          "name": "첨부 허용 확장자"
+        },
+        {
+          "code": "FEAT_ORG_1",
+          "name": "조직도 탭"
+        },
+        {
+          "code": "FEAT_URL_1",
+          "name": "공지 링크",
+          "type": "url"
+        },
+        {
+          "code": "FEAT_UI_1",
+          "name": "화면 옵션"
+        },
+        {
+          "code": "FEAT_OPT",
+          "name": "세부 옵션 (여러 개)",
+          "keys": [
+            "TYPE",
+            "SECTION",
+            "IDENT",
+            "VALUE"
+          ]
+        },
+        {
+          "code": "FEAT_STATE_1",
+          "name": "자리 비움 상태"
+        },
+        {
+          "code": "FEAT_EMPTY_1",
+          "name": "익명 채팅",
+          "note": "값 없이 들어오기만 하면 켜진다"
+        },
+        {
+          "code": "FEAT_EMPTY_2",
+          "name": "읽음 표시 숨김",
+          "note": "값 없이 들어오기만 하면 켜진다"
+        },
+        {
+          "code": "FEAT_OFF_1",
+          "name": "화상회의",
+          "note": "서버가 보내야 메뉴가 생긴다"
+        }
+      ],
+      "labelFrom": {
+        "event": "LOGIN_START",
+        "field": "uid"
+      },
+      "catalogSource": {
+        "root": "loglens/sources",
+        "pattern": "\"(FEAT_[A-Z0-9_]+)\"",
+        "include": [
+          "*.py"
+        ]
+      },
+      "sourceLink": "vscode://file{abs}:{line}"
+    }
   ]
 }
