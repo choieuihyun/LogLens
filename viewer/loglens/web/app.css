@@ -6,6 +6,8 @@
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 *{box-sizing:border-box}
+/* display 를 준 요소(.chk 등)는 hidden 속성이 먹지 않는다. 숨긴 것은 무조건 숨긴다. */
+[hidden]{display:none !important}
 html,body{height:100%}
 body{
   margin:0; background:var(--bg); color:var(--fg);
