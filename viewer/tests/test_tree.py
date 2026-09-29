@@ -33,7 +33,7 @@ P = Parser("UC")
 
 
 def line(dept, parent="-", name=None, event="ORG_FETCH_OK", domain="MEMBER",
-         org="ucware", **f):
+         org="acme", **f):
     parts = [f"evt={event}", f"orgId={org}", f"dept={dept}", f"parent={parent}"]
     if name:
         parts.append(f"deptName={name}")
@@ -41,14 +41,14 @@ def line(dept, parent="-", name=None, event="ORG_FETCH_OK", domain="MEMBER",
     return f"08-12 10:00:00.000  1  1 D UC_{domain}: " + " ".join(parts)
 
 
-def user(dept, uid, name, org="ucware"):
+def user(dept, uid, name, org="acme"):
     """부서 아래 사람 한 명. org=None 이면 범위 필드가 아예 없는 줄."""
     head = f"evt=ORG_USER" + (f" orgId={org}" if org else "")
     return (f"08-12 10:00:00.000  1  1 D UC_MEMBER: {head} "
             f"dept={dept} uid={uid} name={name}")
 
 
-def truncated(dept, skipped, org="ucware"):
+def truncated(dept, skipped, org="acme"):
     """생략된 인원 수. org=None 이면 범위 필드가 아예 없는 줄."""
     head = "evt=ORG_USER_TRUNCATED" + (f" orgId={org}" if org else "")
     return (f"08-12 10:00:00.000  1  1 D UC_MEMBER: {head} "
@@ -316,8 +316,8 @@ class TestScope(unittest.TestCase):
 
     def test_컨테이너가_둘이면_트리도_둘이다(self):
         t = build([
-            line("-", name="조직도", org="ucware", subDept=1),
-            line("D1", parent="-", name="CEO", org="ucware"),
+            line("-", name="조직도", org="acme", subDept=1),
+            line("D1", parent="-", name="CEO", org="acme"),
             line("-", name="협력사", org="partner", subDept=1),
             line("P1", parent="-", name="협력사부서", org="partner"),
         ])
@@ -328,13 +328,13 @@ class TestScope(unittest.TestCase):
 
     def test_남의_조직_부서가_섞이지_않는다(self):
         t = build([
-            line("-", name="조직도", org="ucware", subDept=1),
-            line("D1", parent="-", name="CEO", org="ucware"),
+            line("-", name="조직도", org="acme", subDept=1),
+            line("D1", parent="-", name="CEO", org="acme"),
             line("-", name="협력사", org="partner", subDept=1),
             line("P1", parent="-", name="협력사부서", org="partner"),
         ])
-        ucware = next(r for r in t["roots"] if r["name"] == "조직도")
-        self.assertEqual([c["name"] for c in ucware["children"]], ["CEO"])
+        acme = next(r for r in t["roots"] if r["name"] == "조직도")
+        self.assertEqual([c["name"] for c in acme["children"]], ["CEO"])
 
     def test_같은_식별자라도_범위가_다르면_다른_노드다(self):
         t = build([line("D1", name="우리부서", org="a"),
