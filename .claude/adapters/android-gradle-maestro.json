@@ -1,0 +1,40 @@
+{
+  "name": "android-gradle-maestro",
+  "detect": [
+    "gradlew"
+  ],
+  "device": {
+    "check": "adb devices",
+    "count_filter": "NR>1 && $2==\"device\"",
+    "skip_reason": "no_device"
+  },
+  "build": "./gradlew {BUILD_TASK}",
+  "deploy": "./gradlew {INSTALL_TASK}",
+  "teardown": null,
+  "e2e": {
+    "dir_default": "flows",
+    "file_globs": [
+      "*.yaml",
+      "*.yml"
+    ],
+    "command": "maestro test {E2E_PATH} {TAG_OPT} --format=JUNIT --output={REPORT_XML} --debug-output={DEBUG_DIR} --flatten-debug-output",
+    "tag_option": "--include-tags={TAGS}",
+    "tag_scan": {
+      "kind": "yaml_list",
+      "key": "tags"
+    },
+    "report_format": "junit-xml",
+    "artifact_globs": [
+      "**/*.png"
+    ]
+  },
+  "env": {},
+  "env_path_prepend": [
+    "{HOME}/.maestro/bin",
+    "{ANDROID_HOME}/platform-tools"
+  ],
+  "logs": {
+    "command": "adb logcat -d -t 200",
+    "description": "실기기 최근 로그"
+  }
+}

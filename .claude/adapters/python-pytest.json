@@ -1,0 +1,28 @@
+{
+  "name": "python-pytest",
+  "detect": [
+    "pyproject.toml"
+  ],
+  "device": null,
+  "build": "python3 -m compileall -q .",
+  "deploy": null,
+  "teardown": null,
+  "e2e": {
+    "dir_default": "tests",
+    "file_globs": [
+      "test_*.py"
+    ],
+    "command": "python3 -m pytest {E2E_PATH} {TAG_OPT} --junitxml={REPORT_XML}",
+    "tag_option": "-m \"{TAGS}\"",
+    "tag_join": " or ",
+    "tag_scan": {
+      "kind": "regex",
+      "pattern": "@pytest\\.mark\\.([A-Za-z0-9_]+)"
+    },
+    "report_format": "junit-xml",
+    "artifact_globs": []
+  },
+  "env": {},
+  "env_path_prepend": [],
+  "logs": null
+}

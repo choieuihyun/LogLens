@@ -1,0 +1,55 @@
+# harness_commit d35a063d21e2f2c7891ad42e35cdc1620e009b9d
+# harness_path /Users/uihyeon/Personal_Agent
+# harness_remote https://github.com/choieuihyun/Personal_Agent.git
+# installed_at 2026-09-30T12:54:15
+8f29d8b512cb1d6a9083ebe4e26bcdf77cad6870  agents/builder/AGENT.md
+88f04f6d9359ca36a3a2a5265e1e5c44d77118d8  agents/discuss/AGENT.md
+21b3736d07842af0749e789e6e2d6d2d9bc2d85f  agents/documenter/AGENT.md
+4f1d04f12cbd35d809a1e56463b11c76192c001a  agents/explorer/AGENT.md
+7bed7e652499288383c86b2b96ed7ee3ef598c32  agents/implementer/AGENT.md
+c50d518d66f4406bdad053d28c37e27cca7b14e3  agents/plan-checker/AGENT.md
+4535f7b4fb44b74f30a1af6236430d5c3c63806e  agents/planner/AGENT.md
+6b6d356a4553170a619b30226212a82360045faa  agents/spec/AGENT.md
+50687174681797d7088d5a3478e00c5c18bef37d  agents/triage/AGENT.md
+5068f02664324af8bb0968b4d00be4154c07e1fa  agents/tutor/AGENT.md
+fca47c775b57cab8252b3c984eeed66d01614a98  agents/verifier/AGENT.md
+cf8318f3f5053422e518841bcecc0e7a2d7d395c  commands/deep.md
+718deca8dd353f0e9688ac50c79f2306755e6566  commands/feature.md
+80d6e5f676bed257ec0f235986e8d561a8c4172e  commands/fix.md
+16c7a54f5192994e22f218ddb24571e32089a6be  commands/harness-view.md
+02bc62f4ad09714dce190fc5c3851c7bfebffcdc  commands/setup.md
+d67ee9578f8155bc1bb832f98da5a62553c6874c  commands/study.md
+a95736323c659d5d76151d93c37a5a5a8ad03bd0  scripts/apply_agent_tools.py
+b6be10069c29227da420e80393fbd723a78bd15c  scripts/build_errors.py
+8efc328ada2d6177e5c162bb2fe7919377cc41df  scripts/dod_check.py
+d8bd8c06b9d90723d3c812bc8b0ddd4b55b55f8c  scripts/domains_for.py
+c43066f8099f5b5c374e105d07b3f2f23c096334  scripts/e2e_tags.py
+836e6701cf05ef822bfb2d0bca779746051c94f7  scripts/harness_config.py
+4e11da3fd18ad547e2273475b421944fb14a1a36  scripts/harness_manifest.py
+fbe5b2fe836ebc555787fe92b95f712d980a608e  scripts/harness_version.py
+ad2da41d7c71418e110368bcf4fa8b88f8297e6d  scripts/harness_view.py
+e6bc56dadd6fd17d5eb4804f4b4bbbfdea062e06  scripts/metrics.py
+b5185786cf3594479d0c8c16c101305b78d2dccf  scripts/parse_runner.py
+57561a07d5bfd44e2215dfb1064b8407afe2b144  scripts/record_metric.py
+a33978d8d14c84d3280016c25d3ae400635df619  scripts/runtime_gate.sh
+3773d961e2b3c147f2b8f0e2f8864a971ffdb322  scripts/save_result.py
+eeb84f1bea557f0cabda510c6ea79e5f09187ffd  setup/builder.md
+52c3f88d22b1f33a8f43f6ac50e8534421aacabb  setup/discuss.md
+455184d153b97573ebc307d9168382151f35102e  setup/documenter.md
+b4608ae4fb8d3de32d5d607a0ebfe705c160f0dd  setup/explorer.md
+37dceb98740dd7b593e8f39cf25964ac1e2e7a3b  setup/implementer.md
+551f3c01ac010677402a8264346ebdfe1bbb9859  setup/plan-checker.md
+4b366b58358bbc01c5d29762abab48f5bba1a45b  setup/planner.md
+b02566cef34eace65be57d5f649448718e75d5b0  setup/spec.md
+94a58e7f72716e9c2409012f126213e85d454c8f  setup/triage.md
+fbea9c4e8e70820cf5ca65bcd9ecf79338e89e42  setup/tutor.md
+92141e2576280b9f2e7cd29a82c065f663640e0b  setup/verifier.md
+4b39cba1c0358e6ceb434c6f30a7213e2fec970a  adapters/README.md
+cb42037577461f94203f1da6118b31d7f4f90b7f  adapters/android-gradle-maestro.json
+a8bddc4e4b07c768a9eb2423c8adeeac1f6f0005  adapters/node-vite-playwright.json
+928c87717fb418556ec729debee680fcfc947908  adapters/python-pytest.json
+d64f6536ab38d66a05b6abaaa38c6ef3809fc50e  templates/CLAUDE.md.tmpl
+46c708dc9b6fb9a3dc8b222b1fc660819fc0f3cd  templates/DOMAIN.md.tmpl
+9c232aa5ccfdbaca0de33cac3e084dd2c3217c1a  templates/README.md
+7d90dbb8f7c71cc84bff0e767f3e75391b840b61  templates/choices.md
+e78b34249c8e79b0cb19268baaa49cee188f4ef4  templates/project.json.tmpl

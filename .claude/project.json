@@ -1,0 +1,267 @@
+{
+  "project": {
+    "name": "LogLens",
+    "app_id": "",
+    "has_ui": true
+  },
+  "project_root": "",
+  "adapter": "",
+  "adapter_inline": {
+    "name": "loglens-kotlin-python",
+    "detect": [
+      "Makefile",
+      "viewer/pyproject.toml",
+      "lib/settings.gradle.kts"
+    ],
+    "build": "python3 -m compileall -q viewer/loglens viewer/tests tools && (cd viewer && python3 -m unittest discover -s tests -q) && ./lib/gradlew -p lib compileKotlin compileTestKotlin -q --console=plain"
+  },
+  "adapter_override": {},
+  "runtime_gate": false,
+  "vars": {},
+  "env": {},
+  "env_candidates": {},
+  "worktree_markers": [],
+  "e2e": {
+    "dir": "",
+    "tag_key": ""
+  },
+  "domains": {
+    "dir_rules": [
+      {
+        "under": "viewer/loglens",
+        "shared": [
+          "__pycache__"
+        ],
+        "known": [
+          "sources",
+          "web"
+        ]
+      }
+    ],
+    "prefix_rules": [
+      {
+        "under": "viewer/loglens",
+        "map": {
+          "parser": "format",
+          "server": "server",
+          "flows": "analysis",
+          "events": "analysis",
+          "callsites": "analysis",
+          "analytics": "analysis",
+          "catalog": "analysis",
+          "snapshots": "analysis",
+          "config": "config",
+          "migrate": "config",
+          "scaffold": "config",
+          "cli": "config"
+        }
+      },
+      {
+        "under": "viewer/tests",
+        "map": {
+          "test_parser": "format",
+          "test_api": "server",
+          "test_flows": "analysis",
+          "test_events": "analysis",
+          "test_callsites": "analysis",
+          "test_analytics": "analysis",
+          "test_migrate": "config",
+          "test_scaffold": "config"
+        }
+      },
+      {
+        "under": "src/main/kotlin/io/loglens/core",
+        "map": {
+          "LineFormat": "format",
+          "Formatter": "format",
+          "ConsoleSink": "emitter",
+          "FileSink": "emitter",
+          "Level": "emitter",
+          "LogDomain": "emitter",
+          "LogLens": "emitter",
+          "Masker": "emitter",
+          "MemorySink": "emitter",
+          "Sanitizer": "emitter",
+          "Sink": "emitter",
+          "Truncator": "emitter"
+        }
+      },
+      {
+        "under": "src/test/kotlin/io/loglens/core",
+        "map": {
+          "FormatterTest": "format",
+          "FileSinkTest": "emitter",
+          "LevelTest": "emitter",
+          "LogLensTest": "emitter",
+          "MaskerTest": "emitter",
+          "SanitizerTest": "emitter",
+          "TruncatorTest": "emitter"
+        }
+      },
+      {
+        "under": "src/main/kotlin/io/loglens/android",
+        "map": {
+          "LogLensAndroid": "emitter",
+          "LogcatSink": "emitter"
+        }
+      },
+      {
+        "under": "src/main/kotlin/io/loglens/sample",
+        "map": {
+          "AppDomain": "emitter"
+        }
+      },
+      {
+        "under": "src/main/java/io/loglens/sample",
+        "map": {
+          "AppDomainJava": "emitter"
+        }
+      },
+      {
+        "under": "src/main/kotlin/io/loglens/demo",
+        "map": {
+          "Demo": "emitter"
+        }
+      },
+      {
+        "under": "src/main/java/io/loglens/demo",
+        "map": {
+          "JavaCallSite": "emitter"
+        }
+      },
+      {
+        "under": "src/main/kotlin/io/loglens/tools",
+        "map": {
+          "RoundTrip": "format"
+        }
+      },
+      {
+        "under": "tools/roundtrip",
+        "map": {
+          "verify": "format"
+        }
+      },
+      {
+        "under": "viewer",
+        "map": {
+          "config.schema": "config"
+        }
+      }
+    ]
+  },
+  "forbidden_globs": [
+    "lib/**/bin/**",
+    "sample-app/**/bin/**",
+    "tools/**/bin/**",
+    "lib/gradlew",
+    "lib/gradlew.bat",
+    "lib/gradle/wrapper/**",
+    "build/**",
+    "**/build/**",
+    "**/__pycache__/**",
+    "기획서.md",
+    "LICENSE"
+  ],
+  "docs": {
+    "conventions": "docs/CONVENTIONS.md",
+    "e2e_guide": "",
+    "domain_map": "docs/domains",
+    "study_dir": "docs/study",
+    "vault_prefix": ""
+  },
+  "crash_provider": {
+    "kind": "none",
+    "app_id": "",
+    "source_package_prefix": "",
+    "issue_tool": "",
+    "events_tool": ""
+  },
+  "risk_axes": {
+    "SYNC": [
+      "viewer/loglens/parser.py",
+      "lib/core/src/main/kotlin/io/loglens/core/Formatter.kt",
+      "lib/core/src/main/kotlin/io/loglens/core/LineFormat.kt",
+      "lib/core/src/main/kotlin/io/loglens/core/Sanitizer.kt",
+      "lib/core/src/main/kotlin/io/loglens/core/Truncator.kt",
+      "lib/core/src/main/kotlin/io/loglens/core/Masker.kt",
+      "tools/roundtrip/**"
+    ],
+    "EVENT": [
+      "viewer/loglens/server.py",
+      "viewer/loglens/web/app.js"
+    ],
+    "THREAD": [
+      "viewer/loglens/sources/**",
+      "viewer/loglens/server.py",
+      "viewer/loglens/cli.py",
+      "lib/core/src/main/kotlin/io/loglens/core/LogLens.kt",
+      "lib/core/src/main/kotlin/io/loglens/core/FileSink.kt",
+      "lib/core/src/main/kotlin/io/loglens/core/MemorySink.kt"
+    ],
+    "DB": [
+      "viewer/loglens/snapshots.py",
+      "viewer/loglens/flows.py",
+      "viewer/loglens/migrate.py",
+      "lib/core/src/main/kotlin/io/loglens/core/FileSink.kt"
+    ],
+    "LIST": [
+      "viewer/loglens/server.py",
+      "viewer/loglens/web/app.js"
+    ]
+  },
+  "risk_globs": [
+    "viewer/loglens/parser.py",
+    "viewer/loglens/config.py",
+    "viewer/config.schema.json",
+    "docs/RECORD_FORMAT.md"
+  ],
+  "ui_test_id": "id",
+  "dod_checks": [
+    {
+      "id": "DOD_THREADLOCAL_WITHINITIAL",
+      "applies_to": "*.kt",
+      "forbid": "^(?!\\s*(//|\\*|/\\*)).*ThreadLocal\\.withInitial",
+      "message": "Android API 26+ 전용. minSdk 21 에서 NoSuchMethodError (DECISIONS D19). 익명 서브클래스로 쓴다"
+    },
+    {
+      "id": "DOD_PY38_STR_PREFIX",
+      "applies_to": "*.py",
+      "forbid": "^(?!\\s*#).*\\.remove(prefix|suffix)\\(",
+      "message": "Python 3.9+ 전용. 뷰어는 3.8 을 지원한다 (pyproject requires-python)"
+    }
+  ],
+  "learning": {
+    "cache_dir": "",
+    "sample_repos": [],
+    "doc_domains": [
+      "kotlinlang.org",
+      "docs.python.org",
+      "developer.android.com",
+      "docs.gradle.org"
+    ],
+    "source_root": ".",
+    "small_samples": [
+      "viewer/loglens/sources/base.py",
+      "viewer/loglens/parser.py",
+      "lib/core/src/main/kotlin/io/loglens/core/LineFormat.kt",
+      "lib/core/src/main/kotlin/io/loglens/core/Truncator.kt"
+    ],
+    "source_globs": []
+  },
+  "agent_tools": {
+    "explorer": [
+      "mcp__serena__find_symbol",
+      "mcp__serena__find_referencing_symbols",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__find_declaration"
+    ],
+    "planner": [
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs"
+    ],
+    "tutor": [
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs"
+    ]
+  }
+}

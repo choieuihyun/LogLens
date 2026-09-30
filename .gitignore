@@ -29,3 +29,5 @@ venv/
 *.iml
 .vscode/
 .DS_Store
+.claude/state/
+.claude/**/__pycache__/
