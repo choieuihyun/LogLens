@@ -76,6 +76,11 @@ class TestFlows(unittest.TestCase):
         self.assertEqual(by["f2"]["durationMs"], 350)
         self.assertEqual(by["f1"]["kind"], "login")
 
+    def test_kind_from_first_funnel_step_not_first_event(self):
+        # 퍼널 앞에 선택 단계가 붙어도 같은 종류로 묶인다 (기준선 비교가 갈라지지 않게)
+        lines = [ev("10:00:00.000", "PREP", flow="p1"), ev("10:00:00.100", "LOGIN_START", flow="p1")]
+        self.assertEqual(list_flows(recs(lines), CFG)[0]["kind"], "login")
+
     def test_stalled_when_old_and_unfinished(self):
         lines = self.LINES + [sysline("10:01:00.000", "I", "X", "한참 뒤")]
         by = {f["id"]: f for f in list_flows(recs(lines), CFG)}
@@ -105,6 +110,12 @@ class TestFlows(unittest.TestCase):
 
     def test_unknown_flow_is_none(self):
         self.assertIsNone(flow_detail(recs(self.LINES), CFG, "nope"))
+
+    def test_label_from_first_present_field(self):
+        cfg = Config.from_dict({"prefix": "APP", "flow": {"labelField": ["uid", "type"]}})
+        lines = ["08-12 10:00:00.000  1  1 D APP_CHAT: evt=SEND_START flowId=k1 type=message",
+                 "08-12 10:00:00.100  1  1 D APP_CHAT: evt=SEND_OK flowId=k1"]
+        self.assertEqual(list_flows(recs(lines), cfg)[0]["label"], "message", "uid 가 없으면 다음 필드")
 
     def test_custom_flow_field(self):
         cfg = Config.from_dict({"prefix": "APP", "flow": {"field": "tx", "labelField": "who"}})

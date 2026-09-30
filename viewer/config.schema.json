@@ -498,9 +498,19 @@
           "description": "흐름을 잇는 필드"
         },
         "labelField": {
-          "type": "string",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ],
           "default": "uid",
-          "description": "흐름 이름으로 보여줄 필드"
+          "description": "흐름 이름으로 보여줄 필드. 여럿이면 앞에서부터 값이 있는 것 (예: [\"uid\", \"type\"])"
         }
       }
     },

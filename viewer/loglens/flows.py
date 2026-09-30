@@ -74,8 +74,17 @@ class FlowSpec:
     def __init__(self, cfg):
         f = getattr(cfg, "flow", None) or {}
         self.field = str(f.get("field") or "flowId")
-        self.label_field = str(f.get("labelField") or "uid")
+        # 이름 필드는 여럿을 적을 수 있다. 앞에서부터 값이 있는 것을 쓴다 (예: ["uid", "type"])
+        lf = f.get("labelField") or "uid"
+        self.label_fields = [str(x) for x in (lf if isinstance(lf, list) else [lf])]
         self.cfg = cfg
+
+    def label(self, recs: List[Record]) -> Optional[str]:
+        for fld in self.label_fields:
+            for r in recs:
+                if r.fields.get(fld):
+                    return r.fields[fld]
+        return None
 
     def table_of(self, rec: Record):
         for t in self.cfg.tables:
@@ -113,12 +122,16 @@ def _latest_ms(records: List[Record]) -> Optional[int]:
 
 
 def _kind(cfg, recs: List[Record]) -> str:
-    """흐름의 종류. 퍼널에 속하면 퍼널 id, 아니면 첫 이벤트 이름. 기준선을 이 이름으로 찾는다."""
-    first = recs[0].event if recs else ""
-    for f in cfg.funnels:
-        if first in f.steps:
-            return f.id
-    return first or "?"
+    """흐름의 종류. 기준선을 이 이름으로 찾는다.
+
+    흐름 안에서 퍼널 단계에 해당하는 첫 이벤트로 정한다. 첫 이벤트만 보면, 퍼널 앞에 붙는
+    선택 단계(예: 새 방일 때만 오는 키 발급)로 시작하는 흐름이 다른 종류로 갈라진다.
+    """
+    for r in recs:
+        for f in cfg.funnels:
+            if r.event in f.steps:
+                return f.id
+    return (recs[0].event if recs else "") or "?"
 
 
 def _steps(recs: List[Record], spec: FlowSpec) -> List[dict]:
@@ -154,7 +167,7 @@ def list_flows(records: List[Record], cfg, baselines: Optional[dict] = None) -> 
         oc = _outcome(cfg, recs)
         age = _gap(last_ms, latest)
         status = oc if oc != "open" else ("stalled" if age is not None and age > STALL_MS else "open")
-        label = next((r.fields[spec.label_field] for r in recs if r.fields.get(spec.label_field)), None)
+        label = spec.label(recs)
         steps = _steps(recs, spec)
         kind = _kind(cfg, recs)
         dev = None
@@ -226,8 +239,7 @@ def flow_detail(records: List[Record], cfg, fid: str, baselines: Optional[dict] 
             missing = [e for e in f.steps if e not in seen]
 
     d = {
-        "id": fid, "kind": kind, "status": status, "label":
-            next((r.fields[spec.label_field] for r in recs if r.fields.get(spec.label_field)), None),
+        "id": fid, "kind": kind, "status": status, "label": spec.label(recs),
         "firstTs": recs[0].ts, "lastTs": recs[-1].ts, "durationMs": _gap(first_ms, last_ms),
         "ageMs": age, "steps": steps, "context": ctx[:CONTEXT_MAX * 2], "missing": missing,
         "contextCounts": counts,
