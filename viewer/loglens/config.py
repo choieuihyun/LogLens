@@ -308,6 +308,9 @@ class Config:
     flow: Dict[str, str] = field(default_factory=dict)
     # 이름 검사에 쓸 동의어 묶음. 표기로는 못 잡는 것(uid / userId)만 적는다. 기본은 비어 있다.
     synonyms: List[List[str]] = field(default_factory=list)
+    # 예전 로그 이관 도우미. {"calls": ["Log", ...], "domainExpr": "AppDomain.{domain}"}
+    # 소스 위치와 여는 명령은 eventSource 를 같이 쓴다.
+    migration: Dict[str, object] = field(default_factory=dict)
     tabs: List[Tab] = field(default_factory=list)
     issue_rules: List[IssueRule] = field(default_factory=list)
     funnels: List[Funnel] = field(default_factory=list)
@@ -331,6 +334,7 @@ class Config:
             snapshot_dir=d.get("snapshotDir"),
             event_source=d.get("eventSource") or {},
             flow=d.get("flow") or {},
+            migration=d.get("migration") or {},
             synonyms=[list(map(str, g)) for g in ((d.get("naming") or {}).get("synonyms") or [])
                       if isinstance(g, list)],
             tabs=[Tab(id=t["id"], label=t.get("label", t["id"]),

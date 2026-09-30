@@ -22,11 +22,12 @@ import threading
 import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Deque, List, Optional
+from typing import Deque, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 from . import callsites
 from . import events as events_mod
+from . import migrate as migrate_mod
 from . import catalog as catalog_src
 from .analytics import (IssueTray, aggregate, build_table, build_tree, check_value,
                         diff_groups)
@@ -229,6 +230,42 @@ class Hub:
         d["scope"] = ("뷰어가 받은 로그 전부 — 뜰 때 읽은 기기의 예전 기록 포함. "
                       "이번 테스트만 보려면 시작 전에 '다시 세기'")
         return d
+
+    # -- 예전 로그 이관 (읽기 전용) ---------------------------------------------
+    def _migration_ctx(self):
+        src = self.cfg.event_source
+        inv, _ = events_mod.inventory(src) if src.get("root") else ([], None)
+        known = {e["event"]: (e["domains"] or ["기타"])[0] for e in inv}
+        by_dom: Dict[str, int] = {}
+        for e in inv:
+            d = (e["domains"] or ["기타"])[0]
+            by_dom[d] = by_dom.get(d, 0) + len(e["emits"])
+        return src, known, by_dom
+
+    def migration(self) -> dict:
+        src, known, by_dom = self._migration_ctx()
+        if not src.get("root"):
+            return {"error": "eventSource 가 없어 앱 소스를 읽지 않았다", "domains": [], "files": [], "totals": {}}
+        files, err = migrate_mod.scan(src, self.cfg.migration, self.cfg, known)
+        d = migrate_mod.summarize(files, by_dom)
+        d["error"] = err
+        d["calls"] = self.cfg.migration.get("calls") or migrate_mod.DEFAULT_CALLS
+        return d
+
+    def migration_file(self, rel: str) -> dict:
+        src, known, _ = self._migration_ctx()
+        root = os.path.abspath(os.path.expanduser(str(src.get("root") or "")))
+        path = os.path.realpath(os.path.join(root, rel))
+        if not root or not path.startswith(os.path.realpath(root) + os.sep) or not os.path.isfile(path):
+            return {"error": "소스 루트 안의 파일이 아니다", "items": []}
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+        mig = self.cfg.migration
+        calls = [str(c) for c in (mig.get("calls") or migrate_mod.DEFAULT_CALLS) if re.fullmatch(r"\w+", str(c))]
+        items = migrate_mod.scan_file(rel, lines, calls, migrate_mod.Resolver(self.cfg),
+                                      "kt" if rel.endswith(".kt") else "java",
+                                      str(mig.get("domainExpr") or "AppDomain.{domain}"), known)
+        return {"file": rel, "items": items, "error": None}
 
     def reset_seen(self) -> None:
         with self._lock:
@@ -502,6 +539,10 @@ def _handler_factory(hub: Hub, source: LogSource):
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            if path == "/api/migrate":
+                return self._json(hub.migration())
+            if path == "/api/migrate/file":
+                return self._json(hub.migration_file(q.get("path", [""])[0]))
             if path == "/api/events":
                 return self._json(hub.events())
             if path == "/api/flows":
@@ -557,6 +598,14 @@ def _handler_factory(hub: Hub, source: LogSource):
                     if on:
                         set_verbose(hub.cfg, source, dom, False)
                 return self._json(verbose_state(hub.cfg, source))
+            if u.path == "/api/migrate/open":
+                src = hub.cfg.event_source
+                if not (src.get("root") and src.get("open")):
+                    return self._json({"ok": False, "error": "eventSource 가 설정되지 않았다"}, 400)
+                line = q.get("line", [""])[0]
+                r = open_at(os.path.abspath(os.path.expanduser(str(src["root"]))),
+                            f"{q.get('path', [''])[0]}:{line}", [str(a) for a in src["open"]])
+                return self._json(r, 200 if r["ok"] else 400)
             if u.path == "/api/events/reset":
                 hub.reset_seen()
                 return self._json({"ok": True})
