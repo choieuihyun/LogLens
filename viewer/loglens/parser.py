@@ -77,6 +77,8 @@ class Record:
     pid: Optional[int] = None
     tid: Optional[int] = None
     truncated: bool = False
+    # 원문 묶음의 머리 줄이면 그 요약 (payloads.PayloadStore.info). 본문은 여기 싣지 않는다.
+    payload: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {
@@ -91,6 +93,7 @@ class Record:
             "pid": self.pid,
             "tid": self.tid,
             "truncated": self.truncated,
+            "payload": self.payload,
             "raw": self.raw,
         }
 

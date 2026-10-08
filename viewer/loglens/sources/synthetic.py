@@ -8,6 +8,7 @@
   - flowId 로 이어지는 로그인 퍼널 (중간 이탈 포함)
   - 레거시 자유형식 로그 (점진 도입 시나리오)
   - 크래시 스택 / ANR (이슈 트레이)
+  - 응답 본문을 통째로 실은 원문 (짧은 JSON, 여러 줄로 나뉜 긴 JSON, XML, 조각이 빠진 경우)
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import time
 from datetime import datetime
 from typing import Iterator, List
 
+from .. import payloads
 from .base import LogSource, marker
 
 PID = 4321
@@ -78,6 +80,7 @@ class SyntheticSource(LogSource):
         self.rnd = random.Random(seed)
         self.burst = burst       # >0 이면 이만큼 즉시 뿜고 실시간 모드로 전환
         self._flow = itertools.count(1000)
+        self._pl = itertools.count(1)
         # 실행마다 다른 접두어. 스냅샷을 켜 두면 재시작 후 같은 flowId 가 옛 묶음을 덮어쓴다.
         self._run = format(int(time.time()) % 4096, "03x")
 
@@ -93,6 +96,41 @@ class SyntheticSource(LogSource):
         if msg:
             body += " | " + msg
         return self._line(level, f"{self.prefix}_{domain}", body)
+
+    def _payload(self, domain: str, event: str, text: str, fields: str = "",
+                 chunk_bytes: int = 3400, lose: bool = False) -> List[str]:
+        """원문을 라이브러리와 같은 모양으로 찍는다 (docs/RECORD_FORMAT.md 8절).
+
+        이 생성기는 계약을 흉내내는 쪽이라 어긋나기 쉽다. tests/test_payloads.py 가 여기서 나온 줄을
+        뷰어의 조립 경로에 넣어 글자 그대로 돌아오는지 본다.
+        lose 면 가운데 조각 하나를 빼서 logcat 이 줄을 잃은 상황을 만든다.
+        """
+        parts, cur, size = [], [], 0
+        budget = chunk_bytes - 16                                 # 가장자리 보정 여유
+        for ch in text:
+            # 글자 하나만 넘기면 가장자리로 보고 공백을 바꿔 버린다. 안쪽 글자의 폭을 잰다.
+            w = len(payloads.escape(f"x{ch}x").encode("utf-8")) - 2
+            if size + w > budget and cur:
+                parts.append("".join(cur))
+                cur, size = [], 0
+            cur.append(ch)
+            size += w
+        parts.append("".join(cur))
+        pl_id = f"{self._run}{next(self._pl):x}"
+        head = f"evt={event}{' ' + fields if fields else ''} plId={pl_id}"
+        tail = f"plParts={len(parts)} plBytes={len(text.encode('utf-8'))}"
+        out = []
+        for i, p in enumerate(parts, 1):
+            if lose and len(parts) > 2 and i == 2:
+                continue
+            body = f"{head} plPart={i} {tail}" + (f" | {payloads.escape(p)}" if p else "")
+            out.append(self._line("D", f"{self.prefix}_{domain}", body))
+        return out
+
+    def _address_book(self, n: int) -> str:
+        rows = ",".join(f'{{"uid":{100 + i},"name":"사용자 {i + 1}","dept":"개발 {1 + i % 4}팀",'
+                        f'"mobile":"***","memo":"첫 줄\\n둘째 줄"}}' for i in range(n))
+        return f'{{"result":"ok","count":{n},"list":[{rows}]}}'
 
     # -- 시나리오 -------------------------------------------------------------
     def _login_flow(self) -> list:
@@ -165,8 +203,28 @@ class SyntheticSource(LogSource):
             return [self._evt("E", "NET", "REQUEST_FAIL",
                               f"host=api.example.test code={self.rnd.choice([500, 502, 408])} "
                               f"err=ConnectException:timeout")]
-        return [self._evt("D", "NET", "REQUEST_OK",
-                          f"host=api.example.test code=200 ms={self.rnd.randint(20, 900)}")]
+        # 응답 본문을 통째로 남기는 요청만 flowId 를 단다 (요약 로그와 원문을 잇는 용도).
+        # 전부 달면 한 줄짜리 흐름이 흐름 목록을 덮는다.
+        roll = self.rnd.random()
+        fid = f"n{self._run}{next(self._flow)}"
+        flow = f"flowId={fid} " if roll < 0.40 else ""
+        out = [self._evt("D", "NET", "REQUEST_OK",
+                         f"{flow}host=api.example.test code=200 ms={self.rnd.randint(20, 900)}")]
+        # 요약 로그와 이벤트 이름을 달리하고 같은 flowId 로 잇는다.
+        if roll < 0.25:
+            out += self._payload("NET", "RESPONSE_BODY", self._address_book(self.rnd.randint(2, 5)),
+                                 f"flowId={fid}")
+        elif roll < 0.33:
+            # 한 줄 한도를 넘는 본문 — 여러 줄로 나뉜다. 가끔은 가운데 조각이 빠진다.
+            out += self._payload("NET", "RESPONSE_BODY", self._address_book(self.rnd.randint(90, 160)),
+                                 f"flowId={fid}", lose=self.rnd.random() < 0.3)
+        elif roll < 0.40:
+            xml = ('<?xml version="1.0" encoding="UTF-8"?>\n<org id="N1" name="본사">\n'
+                   + "".join(f'  <dept id="N1{i}" name="부서 {i}"><member uid="{100 + i}">사용자 {i}</member></dept>\n'
+                             for i in range(1, self.rnd.randint(3, 7)))
+                   + "</org>")
+            out += self._payload("NET", "RESPONSE_BODY", xml, f"flowId={fid}")
+        return out
 
     def _file(self) -> List[str]:
         ok = self.rnd.random() > 0.1

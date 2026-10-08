@@ -35,6 +35,11 @@
       "domains": [
         "FILE_XFER"
       ]
+    },
+    {
+      "id": "payload",
+      "label": "원문",
+      "payload": "only"
     }
   ],
   "issueRules": [

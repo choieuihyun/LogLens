@@ -1,4 +1,4 @@
-"""세션 파일 · 도메인별 상세 로그 스위치 테스트."""
+"""세션 파일 테스트."""
 
 import os
 import pathlib
@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from loglens.config import Config  # noqa: E402
-from loglens.server import Hub, set_verbose, verbose_state  # noqa: E402
+from loglens.server import Hub  # noqa: E402
 from loglens.sources import build  # noqa: E402
 from loglens.sources.filesrc import SESSION_HEADER  # noqa: E402
 
@@ -67,54 +67,6 @@ class TestSession(unittest.TestCase):
         p.write_text(a.export_session({}), encoding="utf-8")
         got = [ln for ln in build("file", path=str(p)).lines() if not ln.startswith("---")]
         self.assertEqual(got, [line(1)])
-
-
-class FakeAdb:
-    name = "adb"
-
-    def __init__(self, tags=None):
-        self.tags = dict(tags or {})
-        self.calls = []
-
-    def forced_tags(self):
-        return dict(self.tags)
-
-    def set_forced(self, tag, on):
-        self.calls.append((tag, on))
-        if on:
-            self.tags[tag] = "VERBOSE"
-        else:
-            self.tags.pop(tag, None)
-        return True
-
-
-class TestVerbose(unittest.TestCase):
-    CFG = Config.from_dict({"prefix": "APP", "tabs": [
-        {"id": "chat", "label": "채팅", "domains": ["CHAT"]},
-        {"id": "net", "label": "네트워크", "domains": ["NET", "API2"]}]})
-
-    def test_state_and_toggle(self):
-        adb = FakeAdb({"APP_CHAT": "VERBOSE", "OTHER": "DEBUG"})
-        st = verbose_state(self.CFG, adb)
-        self.assertEqual(st["states"], {"CHAT": True, "NET": False, "API2": False})
-        self.assertTrue(set_verbose(self.CFG, adb, "NET", True)["ok"])
-        self.assertEqual(adb.calls, [("APP_NET", True)])
-
-    def test_only_configured_domains(self):
-        adb = FakeAdb()
-        for bad in ("ORG", "CHAT; reboot", "chat", ""):
-            self.assertFalse(set_verbose(self.CFG, adb, bad, True)["ok"], bad)
-        self.assertEqual(adb.calls, [], "설정에 없는 도메인은 기기에 보내지 않는다")
-
-    def test_non_adb_source(self):
-        synth = build("synth")
-        self.assertFalse(verbose_state(self.CFG, synth)["available"])
-        self.assertFalse(set_verbose(self.CFG, synth, "CHAT", True)["ok"])
-
-    def test_long_tag_is_flagged(self):
-        cfg = Config.from_dict({"prefix": "APP", "tabs": [
-            {"id": "x", "label": "x", "domains": ["A_VERY_LONG_DOMAIN_NAME"]}]})
-        self.assertEqual(verbose_state(cfg, FakeAdb())["tooLong"], ["A_VERY_LONG_DOMAIN_NAME"])
 
 
 if __name__ == "__main__":

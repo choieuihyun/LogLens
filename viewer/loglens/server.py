@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, urlparse
 from . import callsites
 from . import events as events_mod
 from . import migrate as migrate_mod
+from . import payloads as payloads_mod
 from . import catalog as catalog_src
 from .analytics import (IssueTray, aggregate, build_table, build_tree, check_value,
                         diff_groups)
@@ -61,6 +62,8 @@ class Hub:
         self.snapshots = SnapshotStore(cfg.snapshot_dir) if cfg.snapshot_dir else None
         self.baselines = BaselineStore(cfg.snapshot_dir) if cfg.snapshot_dir else None
         self.seen = events_mod.Seen()
+        # 원문 조각은 버퍼와 따로 모은다. 버퍼에는 묶음마다 머리 한 줄만 남는다.
+        self.payloads = payloads_mod.PayloadStore()
         # 세션 파일을 보는 중이면 실시간 수신을 받지 않는다 (섞이면 무엇을 보는지 모른다)
         self.session: Optional[dict] = None
         self.catalog_errors: dict = {}
@@ -74,6 +77,16 @@ class Hub:
         if rec.raw.startswith(MARKER):
             self.status = rec.raw[len(MARKER):].strip()
         with self._lock:
+            # 원문 조각: 본문은 따로 모으고, 묶음의 첫 줄만 본문을 뗀 머리로 남긴다.
+            # 나머지 조각은 목록·통계·이슈·흐름 어디에도 들어가지 않는다.
+            added = self.payloads.add(rec)
+            if added is not None:
+                if not added["first"]:
+                    return
+                rec.payload = added["info"]
+                rec.raw = payloads_mod.strip_body(rec.raw)
+                rec.msg = None
+                rec.fields = {k: v for k, v in rec.fields.items() if not payloads_mod.is_reserved(k)}
             self.seq += 1
             self.buffer.append(rec)
             self.tray.observe(rec)
@@ -106,6 +119,7 @@ class Hub:
             self.buffer.clear()
             self.tray.clear()
             self.seen.clear()                  # 비우기 = 커버리지도 처음부터
+            self.payloads.clear()
 
     # -- 읽기 -----------------------------------------------------------------
     def subscribe(self) -> queue.Queue:
@@ -131,12 +145,31 @@ class Hub:
             }
 
     # -- 세션 파일 ---------------------------------------------------------------
-    def export_session(self, source_desc: dict) -> str:
-        """지금 버퍼를 세션 파일로. 첫 줄은 설명, 나머지는 받은 원본 줄 그대로."""
+    def payload(self, key: str) -> Optional[dict]:
+        """원문 묶음 하나를 되살려 돌려준다. 모아 둔 것에서 밀려났으면 None."""
+        with self._lock:
+            return self.payloads.detail(key)
+
+    def export_session(self, source_desc: dict, with_payloads: bool = False) -> str:
+        """지금 버퍼를 세션 파일로. 첫 줄은 설명, 나머지는 받은 원본 줄 그대로.
+
+        원문 본문은 기본으로 뺀다. 세션 파일은 메신저와 이슈에 붙여 돌리는 파일이고,
+        원문에는 가려지지 않은 개인정보가 남아 있을 수 있다. 뺀 자리는 표시해 둔다.
+        """
         import datetime
         with self._lock:
-            lines = [r.raw for r in self.buffer]
+            lines = []
+            for r in self.buffer:
+                if not r.payload:
+                    lines.append(r.raw)
+                    continue
+                raws = self.payloads.raw_lines(r.payload["key"])
+                if with_payloads and raws:
+                    lines.extend(raws)
+                else:
+                    lines.append(payloads_mod.excluded_line(raws[0] if raws else r.raw))
         meta = {"version": 1, "lines": len(lines), "source": source_desc,
+                "payloads": "included" if with_payloads else "excluded",
                 "exportedAt": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
         return SESSION_HEADER + json.dumps(meta, ensure_ascii=False) + "\n" + "\n".join(lines) + "\n"
 
@@ -387,44 +420,6 @@ class Hub:
         return None
 
 
-# -- 도메인별 상세 로그 스위치 (adb 소스에서만) ---------------------------------
-_TAG_MAX = 23          # 구형 기기에서 setprop 키 길이 제한에 걸리는 태그 길이
-
-
-def _domains(cfg) -> List[str]:
-    out = []
-    for t in cfg.tabs:
-        for d in t.domains:
-            if re.fullmatch(r"[A-Z0-9_]+", d) and d not in out:
-                out.append(d)
-    return out
-
-
-def verbose_state(cfg, source) -> dict:
-    if getattr(source, "name", "") != "adb" or not re.fullmatch(r"[A-Z0-9_]+", cfg.prefix or ""):
-        return {"available": False, "reason": "adb 소스에서만 쓸 수 있다"}
-    tags = source.forced_tags()
-    if tags is None:
-        return {"available": False, "reason": "기기에 붙지 못했다"}
-    states, long_ = {}, []
-    for d in _domains(cfg):
-        tag = f"{cfg.prefix}_{d}"
-        states[d] = tags.get(tag, "").upper() in ("VERBOSE", "DEBUG")
-        if len(tag) > _TAG_MAX:
-            long_.append(d)
-    return {"available": True, "prefix": cfg.prefix, "states": states, "tooLong": long_}
-
-
-def set_verbose(cfg, source, domain: str, on: bool) -> dict:
-    """설정의 탭에 있는 도메인만 받는다. 이 문자열은 기기 셸에서 실행된다."""
-    if getattr(source, "name", "") != "adb":
-        return {"ok": False, "error": "adb 소스에서만 쓸 수 있다"}
-    if domain not in _domains(cfg) or not re.fullmatch(r"[A-Z0-9_]+", cfg.prefix or ""):
-        return {"ok": False, "error": "설정의 탭에 없는 도메인이다"}
-    ok = source.set_forced(f"{cfg.prefix}_{domain}", on)
-    return {"ok": ok, "error": None if ok else "기기에 적용하지 못했다"}
-
-
 def open_at(root: str, where: str, argv_tmpl: List[str], runner=subprocess.Popen) -> dict:
     """where(파일:줄)를 설정의 명령으로 연다.
 
@@ -527,10 +522,14 @@ def _handler_factory(hub: Hub, source: LogSource):
                 return self._json(hub.stats())
             if path == "/api/tree":
                 return self._json(hub.trees())
-            if path == "/api/adb/verbose":
-                return self._json(verbose_state(hub.cfg, source))
+            if path == "/api/payload":
+                d = hub.payload(q.get("key", [""])[0])
+                if d is None:
+                    return self._json({"error": "이 원문은 뷰어가 모아 둔 것에서 밀려났다"}, 404)
+                return self._json(d)
             if path == "/api/session/export":
-                body = hub.export_session(source.describe()).encode("utf-8")
+                body = hub.export_session(source.describe(),
+                                          q.get("payloads", ["0"])[0] == "1").encode("utf-8")
                 name = time.strftime("loglens-%Y%m%d-%H%M%S.loglens")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -589,15 +588,6 @@ def _handler_factory(hub: Hub, source: LogSource):
             if u.path == "/api/session/live":
                 hub.go_live()
                 return self._json({"ok": True})
-            if u.path == "/api/adb/verbose":
-                r = set_verbose(hub.cfg, source, q.get("domain", [""])[0], q.get("on", ["0"])[0] == "1")
-                return self._json(r, 200 if r["ok"] else 400)
-            if u.path == "/api/adb/verbose/off-all":
-                st = verbose_state(hub.cfg, source)
-                for dom, on in (st.get("states") or {}).items():
-                    if on:
-                        set_verbose(hub.cfg, source, dom, False)
-                return self._json(verbose_state(hub.cfg, source))
             if u.path == "/api/migrate/open":
                 src = hub.cfg.event_source
                 if not (src.get("root") and src.get("open")):

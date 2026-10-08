@@ -151,6 +151,7 @@ def _steps(recs: List[Record], spec: FlowSpec) -> List[dict]:
             "delta": _gap(prev_ms, now) if steps else 0,
             "fields": {k: v for k, v in r.fields.items() if k != spec.field},
             "msg": r.msg, "count": 1, "table": t.id if t else None,
+            "payload": r.payload,
             "outcome": spec.cfg.outcome.classify(r.event),
         })
         prev_ms = now if now is not None else prev_ms

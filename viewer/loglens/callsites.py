@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Tuple
 from .catalog import _SKIP_DIRS
 
 # LogLens 호출에서 이벤트 이름. 캡처그룹 1 이 이벤트 이름이다.
-DEFAULT_PATTERN = r'LogLens\.[vdiwe]\(\s*[^,()]+,\s*"([A-Z0-9_]+)"'
+DEFAULT_PATTERN = r'LogLens\.(?:[vdiwe]|payload)\(\s*[^,()]+,\s*"([A-Z0-9_]+)"'
 _DEFAULT_INCLUDE = ["*.java", "*.kt"]
 # 부르는 곳이 이보다 많으면 도우미가 아니라 흔한 이름으로 본다
 MAX_CALLERS = 8

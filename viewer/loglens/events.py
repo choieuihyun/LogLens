@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Tuple
 
 from .callsites import _COMMENT_LINE, _DEFAULT_INCLUDE, _enclosing_method, _files
 
-_CALL = re.compile(r"\bLogLens\.([vdiwe])\s*\(")
+_CALL = re.compile(r"\bLogLens\.([vdiwe]|payload)\s*\(")
 _STR = re.compile(r'^"((?:[^"\\]|\\.)*)"$')
 _UPPER_SNAKE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
 _MAX_CALL_LINES = 20
@@ -107,8 +107,11 @@ def _kt_pair_key(a: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-def parse_call(args: List[str]) -> Optional[Tuple[str, str, List[str]]]:
-    """(도메인, 이벤트, 필드 키) — 이벤트가 문자열 리터럴이 아니면 None (동적 이름은 셀 수 없다)."""
+def parse_call(args: List[str], payload: bool = False) -> Optional[Tuple[str, str, List[str]]]:
+    """(도메인, 이벤트, 필드 키) — 이벤트가 문자열 리터럴이 아니면 None (동적 이름은 셀 수 없다).
+
+    payload 면 LogLens.payload(도메인, "이벤트", 원문, 필드…) 다. 셋째 인자는 필드가 아니라 원문이다.
+    """
     if len(args) < 2:
         return None
     event = _lit(args[1])
@@ -117,10 +120,13 @@ def parse_call(args: List[str]) -> Optional[Tuple[str, str, List[str]]]:
     dom_expr = args[0].strip()
     m = re.search(r"([A-Za-z0-9_]+)\s*$", dom_expr)
     domain = m.group(1).upper() if m and re.fullmatch(r"[A-Z0-9_]+", m.group(1)) else "기타"
-    rest = args[2:]
+    rest = args[3:] if payload else args[2:]
     keys: List[str] = []
     throwable = False
-    if any(_kt_pair_key(a) for a in rest):
+    if payload:
+        keys = [k for k in (_kt_pair_key(a) for a in rest) if k] or \
+               [k for k in (_lit(a) for a in rest[0::2]) if k is not None]
+    elif any(_kt_pair_key(a) for a in rest):
         # 코틀린 "k" to v. 예외는 쌍이 아닌 첫 인자로 온다 (LogLens.e(d, "E", ex, "k" to v))
         if rest and not _kt_pair_key(rest[0]) and _lit(rest[0]) is None:
             throwable = True
@@ -151,7 +157,8 @@ def inventory(source: Dict[str, object]) -> Tuple[List[dict], Optional[str]]:
                 continue
             for m in _CALL.finditer(ln):
                 call = _call_text(lines, i, m.end() - 1)
-                parsed = parse_call(_split_args(call)) if call else None
+                is_payload = m.group(1) == "payload"
+                parsed = parse_call(_split_args(call), is_payload) if call else None
                 if not parsed:
                     continue
                 domain, event, keys = parsed
@@ -159,7 +166,7 @@ def inventory(source: Dict[str, object]) -> Tuple[List[dict], Optional[str]]:
                                              "emits": [], "declared": []})
                 if domain not in e["domains"]:
                     e["domains"].append(domain)
-                lvl = m.group(1).upper()
+                lvl = "D" if is_payload else m.group(1).upper()      # 원문은 늘 D 로 나간다
                 if lvl not in e["levels"]:
                     e["levels"].append(lvl)
                 e["emits"].append({"where": f"{rel}:{i + 1}", "method": _enclosing_method(lines, i)})

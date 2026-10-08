@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 import threading
@@ -73,35 +72,6 @@ class AdbSource(LogSource):
             return pid
         except Exception:
             return None
-
-    # -- 도메인별 상세 로그 강제 (log.tag.<태그>) ------------------------------
-    # LogLens 라이브러리는 Log.isLoggable(태그, 레벨) 로 V/D 를 강제로 연다 (릴리스 빌드에서도).
-    # 기기 속성이라 뷰어를 꺼도 남는다 — 화면이 켜져 있는 것을 늘 보여줘야 한다.
-    def forced_tags(self) -> Optional[dict]:
-        """log.tag.* 로 켜 둔 태그와 값. 기기에 못 붙으면 None."""
-        try:
-            out = subprocess.run(self._base() + ["shell", "getprop"], capture_output=True,
-                                 text=True, timeout=5).stdout
-        except (OSError, subprocess.SubprocessError):
-            return None
-        tags = {}
-        for ln in out.splitlines():
-            m = re.match(r"^\[log\.tag\.([^\]]+)\]: \[([^\]]*)\]", ln.strip())
-            if m and m.group(2):
-                tags[m.group(1)] = m.group(2)
-        return tags
-
-    def set_forced(self, tag: str, on: bool) -> bool:
-        """태그 하나를 VERBOSE 로 열거나 비운다. 태그는 부르는 쪽이 검증해서 넘긴다."""
-        if not re.fullmatch(r"[A-Z0-9_]+", tag):
-            return False
-        try:
-            r = subprocess.run(self._base() + ["shell", "setprop", f"log.tag.{tag}",
-                                               "VERBOSE" if on else "''"],
-                               capture_output=True, text=True, timeout=5)
-            return r.returncode == 0
-        except (OSError, subprocess.SubprocessError):
-            return False
 
     def available(self) -> bool:
         return shutil.which(self.adb) is not None

@@ -31,13 +31,26 @@ class Tab:
     domains: List[str] = field(default_factory=list)
     # 점진 도입용: 아직 이관 안 된 레거시 태그도 같은 탭에 끌어온다 (기획서 §6).
     legacy_tag_pattern: Optional[str] = None
+    # 원문(요청·응답 본문) 줄을 어떻게 다룰지. "only" 면 원문만, "hide" 면 원문을 뺀다.
+    # "only" 에 domains 를 안 적으면 모든 도메인의 원문을 모은다 ("원문" 탭 하나로 쓰기 좋다).
+    payload: Optional[str] = None
     _legacy_re: Optional[re.Pattern] = None
 
     def __post_init__(self):
         if self.legacy_tag_pattern:
             self._legacy_re = _compile(self.legacy_tag_pattern)
+        if self.payload not in (None, "only", "hide"):
+            # 오타가 조용히 "아무 효과 없음" 이 되지 않게 읽을 때 알린다
+            raise ValueError(f"탭 '{self.id}' 의 payload 는 only 또는 hide 여야 한다: {self.payload!r}")
 
     def matches(self, rec: Record) -> bool:
+        is_payload = bool(getattr(rec, "payload", None))
+        if self.payload == "only" and not is_payload:
+            return False
+        if self.payload == "hide" and is_payload:
+            return False
+        if self.payload == "only" and not self.domains and not self._legacy_re:
+            return True
         if rec.domain and rec.domain in self.domains:
             return True
         if self._legacy_re and rec.tag and self._legacy_re.search(rec.tag):
@@ -46,7 +59,7 @@ class Tab:
 
     def to_dict(self) -> dict:
         return {"id": self.id, "label": self.label, "domains": self.domains,
-                "legacyTagPattern": self.legacy_tag_pattern}
+                "legacyTagPattern": self.legacy_tag_pattern, "payload": self.payload}
 
 
 @dataclass
@@ -339,7 +352,8 @@ class Config:
                       if isinstance(g, list)],
             tabs=[Tab(id=t["id"], label=t.get("label", t["id"]),
                       domains=t.get("domains", []),
-                      legacy_tag_pattern=t.get("legacyTagPattern"))
+                      legacy_tag_pattern=t.get("legacyTagPattern"),
+                      payload=t.get("payload"))
                   for t in d.get("tabs", [])],
             issue_rules=[IssueRule(id=r["id"], label=r.get("label", r["id"]),
                                    severity=r.get("severity", "error"),
