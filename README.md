@@ -134,26 +134,6 @@ sequenceDiagram
     Note over V: 처음(①)부터 반복 — 위쪽 코드는 끊김을 모름
 ```
 
-**도메인별 상세 로그 스위치**도 같은 통로를 씁니다. 뷰어의 스위치를 켜면 서버가 기기 설정을 바꾸고,
-라이브러리가 그 설정을 읽어서 릴리스 빌드에서도 그 도메인만 V/D 로그를 내보냅니다.
-
-```mermaid
-sequenceDiagram
-    participant B as 브라우저
-    participant V as LogLens 서버
-    participant D as 기기
-    participant L as 앱 (LogLens 라이브러리)
-
-    B->>V: 채팅 탭 · 상세 로그 켜기
-    V->>V: 설정에 있는 도메인인지 확인
-    V->>D: adb shell setprop log.tag.APP_CHAT VERBOSE
-    L->>D: Log.isLoggable("APP_CHAT", VERBOSE)?
-    D-->>L: true
-    L-->>D: APP_CHAT 의 V/D 로그 출력 시작
-    V->>D: adb shell getprop (상태 다시 읽기)
-    V-->>B: 머리에 "켜져 있음" 표시 (기기에 남는 설정이라)
-```
-
 ### 3. 로그에서 Android Studio 코드 줄로
 
 뷰어는 앱 소스 폴더를 **읽기만** 합니다. 로그 줄의 `↗`, 크래시 스택의 `at …(Foo.kt:88)`,
@@ -271,6 +251,26 @@ LogLens.e(AppDomainJava.NET, "SOCKET_FAIL", e, "host", host);
 Kotlin 쪽은 `"uid" to uid` 라서 키-값 짝이 컴파일 시점에 보장됩니다. 자바가 대부분인 프로젝트에서
 필드마다 `new Pair<>()` 를 쓰게 하면 마찰이 커서, 자바용 가변 인자 API 를 따로 냅니다.
 
+### 요청·응답 본문을 통째로 남길 때
+
+서버에서 받은 JSON·XML 을 그대로 봐야 할 때가 있습니다. 일반 로그에 넣으면 한 줄 한도(약 4KB)에서
+잘리고 줄바꿈도 되돌릴 수 없습니다. 그래서 따로 부릅니다.
+
+```kotlin
+LogLens.i(AppDomain.MEMBER, "ADDR_ADD_OK", "flowId" to flowId, "count" to n)        // 요약 (늘 하던 대로)
+LogLens.payload(AppDomain.MEMBER, "ADDR_ADD_RES_BODY", responseText, "flowId" to flowId)   // 본문 통째로
+```
+
+```java
+LogLens.payload(AppDomain.MEMBER, "ADDR_ADD_RES_BODY", responseText, "flowId", flowId);
+```
+
+- 길면 여러 줄로 **나눠** 보내고 뷰어가 다시 합칩니다. 글자 하나 안 바뀌고 돌아옵니다 (줄바꿈·백슬래시 포함)
+- 본문 안의 민감한 키(`token`, `mobile` …)도 값을 `***` 로 가립니다. 최선의 노력이라 **로그인·토큰·인증 응답은 싣지 않습니다**
+- **디버그 빌드에서만** 나갑니다. 릴리스에서 여는 방법은 없습니다. 파일 로그에도 기본으로 남지 않습니다
+- 본문은 받은 그대로 넘깁니다 (들여쓰기를 넣거나 줄이지 않습니다). 이벤트 이름은 요약 로그와 다르게 짓습니다
+- 한 번에 64KB 까지 싣고, 넘으면 뒤를 버린 뒤 그렇다고 표시합니다 (`LogLens.setPayloadMaxBytes`)
+
 ### 도메인 목록은 앱이 직접 정합니다
 
 도메인 목록을 라이브러리에 enum 으로 박으면 그 순간 다른 프로젝트에서 못 씁니다.
@@ -297,7 +297,7 @@ Kotlin·Java 예시가 `lib/sample-domains` 에 있습니다. 맞는 걸 복사�
 | `lib/sample-domains` | 도메인 정의 예시 (배포 안 함) | core |
 
 ```bash
-make aar    # → lib/android/build/outputs/aar/loglens-release.aar  (37KB, core 포함)
+make aar    # → lib/android/build/outputs/aar/loglens-release.aar  (52KB, core 포함)
 ```
 
 `core` 가 안드로이드를 참조하지 않는 건 의도한 것입니다. 일반 JVM 에서 테스트하고,
@@ -306,11 +306,21 @@ make aar    # → lib/android/build/outputs/aar/loglens-release.aar  (37KB, core
 ### 호출부가 신경 쓰지 않아도 되는 것들
 
 - **개인정보** — `token`, `password` 같은 키는 알아서 `***`
-- **릴리스 빌드의 V/D 로그** — 문자열을 조립하기도 전에 거릅니다. `init()` 전 기본값이 "디버그 아님"이라 초기화를 깜빡해도 새지 않습니다
+- **릴리스 빌드** — 기본으로 **아무것도 내보내지 않습니다.** 문자열을 조립하기도 전에 거릅니다. `init()` 전 기본값이 "디버그 아님"이라 초기화를 깜빡해도 새지 않습니다
 - **너무 긴 값** — 글자 단위로 잘라 한글·이모지가 깨지지 않습니다
 - **출력 중 예외** — 삼킵니다. 로그 때문에 앱이 죽으면 안 되니까요
-- **릴리스 빌드에서 특정 도메인만 열기** — 다시 빌드하지 않고 `adb shell setprop log.tag.APP_CHAT VERBOSE`.
-  태그가 곧 도메인이라 도메인 단위 제어가 공짜로 따라옵니다 (태그 23자 제한 주의)
+
+릴리스에서도 경고·에러를 받아 봐야 하는 앱은 초기화할 때 **직접 골라서** 엽니다. 고르지 않으면 닫혀 있습니다.
+
+```kotlin
+LogLensAndroid.install(this)                                              // 릴리스: 아무것도 (기본)
+LogLensAndroid.install(this, false, ReleasePolicy.WARN_AND_ABOVE)         // 릴리스: W, E 만
+LogLensAndroid.install(this, false, ReleasePolicy.SILENT.withRuntimeSwitch())
+//  ↑ 평소엔 조용하다가, 현장에서 `adb shell setprop log.tag.APP_CHAT VERBOSE` 로 도메인 하나만 엽니다
+//    (태그가 곧 도메인이라 가능합니다. 태그 23자 제한 주의. adb 를 붙일 수 있으면 누구나 켤 수 있습니다)
+```
+
+원문(`payload`)은 무엇을 고르든 릴리스에서 나가지 않습니다.
 
 ---
 
@@ -326,6 +336,10 @@ make aar    # → lib/android/build/outputs/aar/loglens-release.aar  (37KB, core
   이슈를 보는 중에는 앱만 보기를 끕니다 — ANR 은 시스템이 찍기 때문입니다
 - **계층 트리** — 누르면 그 아래를 불러오는 조직도·주소록 로그를 `parent` 로 다시 세웁니다.
   못 본 가지는 `+4 미관측` 으로, `depth` 가 어긋나면 경고로 보여줍니다
+- **원문 보기** — 요청·응답 본문(`LogLens.payload`)은 목록에 한 줄로 접혀 있고, 누르면 형식에 맞춰 펼칩니다.
+  JSON·XML 은 접고 펴는 **구조**, 들여쓰기만 다시 한 **정리된 원문**, **받은 그대로** 세 가지로 봅니다.
+  값은 받은 글자 그대로입니다 (큰 숫자도 바뀌지 않습니다). 조각이 빠졌으면 어디가 없는지 표시합니다.
+  `원문만` 필터나 탭 설정(`"payload": "only"`)으로 따로 모아 볼 수 있습니다
 - **표로 묶기** — 수백 줄씩 오는 설정 목록을 묶음마다 한 줄로 접고, 누르면 표로 엽니다
   - 두 묶음 비교(추가·삭제·변경), 앱이 구현한 목록과 대조한 **켜짐/꺼짐**, 값 형식 검사
   - 목록은 뷰어가 뜰 때마다 **앱 소스에서 다시 뽑고**, 항목에서 코드 위치로 바로 엽니다
@@ -346,7 +360,8 @@ make aar    # → lib/android/build/outputs/aar/loglens-release.aar  (37KB, core
 
 ### 공유
 
-- **세션 파일** — 지금 로그를 `.loglens` 로 저장하면 팀원이 기기 없이 뷰어에 끌어다 놓아 엽니다
+- **세션 파일** — 지금 로그를 `.loglens` 로 저장하면 팀원이 기기 없이 뷰어에 끌어다 놓아 엽니다.
+  원문 본문은 기본으로 **빼고** 저장합니다 (개인정보가 남아 있을 수 있어서). 넣으려면 "원문까지 넣어 저장"
 - **Markdown 복사 / CSV 저장** — 보이는 그대로
 
 ### 프로젝트마다 설정 파일로 맞춥니다
@@ -396,15 +411,15 @@ loglens --source adb  --package com.your.app --init your-app.json   # 설정 초
 
 ```bash
 make roundtrip
-# roundtrip: 28 passed, 0 failed  (EXACT 24, TRUNC 4)
+# roundtrip: 71 passed, 0 failed  (EXACT 24, TRUNC 4, PAYLOAD 43)
 ```
 
 | | |
 |---|---|
-| 뷰어 | 216개 테스트 통과 (Python 3.9 · 3.10) |
-| 라이브러리 core | 67개 테스트 통과 (Kotlin, kotlin.test) |
-| 양쪽 대조 | 28개 케이스 통과 (Kotlin · Java 두 API 모두) |
-| `.aar` | 빌드 확인 (AGP 8.7.3 / Kotlin 2.0.21, 37KB) |
+| 뷰어 | 241개 테스트 통과 (Python 3.9 · 3.10) |
+| 라이브러리 core | 97개 테스트 통과 (Kotlin, kotlin.test) |
+| 양쪽 대조 | 71개 케이스 통과 (Kotlin · Java 두 API 모두, 원문 43개 포함) |
+| `.aar` | 빌드 확인 (AGP 8.7.3 / Kotlin 2.0.21, 52KB) |
 | 실제 기기 | 업무 앱에 적용해 확인 — adb 연결·앱 추적·재연결, 설정 자동 생성, 흐름 추적, 로그 → Android Studio 이동 |
 
 자세한 내용과 초안에서 바뀐 이유 → [docs/DECISIONS.md](docs/DECISIONS.md)
