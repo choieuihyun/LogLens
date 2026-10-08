@@ -22,6 +22,7 @@ const state = {
   rx: false,
   rxCompiled: null,
   onlyStruct: false,
+  onlyPayload: false,
   onlyPid: false,
   pid: null,              // 지금 돌고 있는 대상 앱 pid
   pids: [],               // 이번 세션에서 본 대상 앱 pid 전부 (앱 재시작 대비)
@@ -54,8 +55,6 @@ async function boot() {
   setStatus(snap.status, true);
   applySession(snap.session);
   state.dirty = true;
-  loadVerbose();
-  setInterval(loadVerbose, 15000);
 
   connect();
   setInterval(render, 100);
@@ -133,7 +132,7 @@ function buildTabs() {
     d.className = 'tab' + (t.id === state.tab ? ' on' : '');
     d.dataset.id = t.id;
     d.innerHTML = `${esc(t.label)}<span class="n" data-n="${esc(t.id)}">0</span>`;
-    d.onclick = () => { state.tab = t.id; buildTabs(); updateVerbose(); state.treeDirty = true; state.dirty = true; };
+    d.onclick = () => { state.tab = t.id; buildTabs(); state.treeDirty = true; state.dirty = true; };
     el.appendChild(d);
   }
 }
@@ -162,6 +161,19 @@ function wire() {
   };
   $('rx').onchange = (e) => { state.rx = e.target.checked; compileQuery(); state.dirty = true; };
   $('onlyStruct').onchange = (e) => { state.onlyStruct = e.target.checked; state.dirty = true; };
+  $('onlyPayload').onchange = (e) => { state.onlyPayload = e.target.checked; state.dirty = true; };
+  $('plClose').onclick = closePayload;
+  $('plTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b && state.plw) { state.plw.view = b.dataset.v; renderPayload(); }
+  });
+  $('plCopy').onclick = copyPayload;
+  $('plFold').onclick = () => {
+    const nodes = $('plBody').querySelectorAll('details.jnode');
+    const anyOpen = [...nodes].some((d, i) => i > 0 && d.open);
+    nodes.forEach((d, i) => { d.open = i === 0 || !anyOpen; });
+    $('plFold').textContent = anyOpen ? '전부 펴기' : '전부 접기';
+  };
   $('onlyPid').onchange = (e) => { state.onlyPid = e.target.checked; state.dirty = true; };
   $('autoscroll').onchange = (e) => { state.autoscroll = e.target.checked; };
   $('btnPause').onclick = () => {
@@ -179,12 +191,6 @@ function wire() {
   $('btnTables').onclick = () => openTable(null, null);
   $('btnFlows').onclick = () => openFlows();
   $('btnEvents').onclick = () => openEvents();
-  $('vChk').onchange = (e) => toggleVerbose(e.target.checked);
-  $('vChip').onclick = async () => {
-    await fetch('/api/adb/verbose/off-all', { method: 'POST' }).catch(() => null);
-    toast('상세 로그 강제를 모두 껐습니다');
-    loadVerbose();
-  };
   $('btnSession').onclick = (e) => { e.stopPropagation(); $('sessMenu').hidden = !$('sessMenu').hidden; };
   $('sessMenu').addEventListener('click', (e) => {
     const b = e.target.closest('button');
@@ -192,7 +198,10 @@ function wire() {
     $('sessMenu').hidden = true;
     if (b.dataset.act === 'export') {
       window.location.href = '/api/session/export';
-      toast('로그를 파일로 저장합니다 (다운로드 폴더)');
+      toast('로그를 파일로 저장합니다 (다운로드 폴더) — 원문 본문은 뺐습니다');
+    } else if (b.dataset.act === 'export-full') {
+      window.location.href = '/api/session/export?payloads=1';
+      toast('원문 본문까지 넣어 저장합니다 — 넘기기 전에 개인정보를 확인하세요', true);
     } else {
       $('sessFile').click();
     }
@@ -277,6 +286,8 @@ function wire() {
     if (fr) { e.preventDefault(); gotoFrame(fr, e.clientX, e.clientY); return; }
     const tb = t.closest('.tl-table');
     if (tb) { e.preventDefault(); openTable(tb.dataset.t, state.flw.sel); return; }
+    const tp = t.closest('.tl-pl');
+    if (tp) { e.preventDefault(); openPayload(tp.dataset.pl); return; }
     if (t.closest('#flwWarn')) {
       e.preventDefault();
       state.flw.showWarn = !state.flw.showWarn;
@@ -368,6 +379,13 @@ function wire() {
       openFlows(fl.dataset.flow);
       return;
     }
+    const pl = e.button === 0 && e.target.closest('.plopen');
+    if (pl) {
+      e.preventDefault();
+      e.stopPropagation();
+      openPayload(pl.dataset.pl);
+      return;
+    }
     const fr = e.button === 0 && e.target.closest('button.frame');
     if (fr) {
       e.preventDefault();
@@ -420,6 +438,10 @@ function inTab(r, id) {
 }
 
 function matchTab(r, t) {
+  // 탭이 원문을 어떻게 다룰지 (설정의 payload). only 에 도메인을 안 적으면 모든 도메인의 원문.
+  if (t.payload === 'only' && !r.payload) return false;
+  if (t.payload === 'hide' && r.payload) return false;
+  if (t.payload === 'only' && !(t.domains || []).length && !t.legacyTagPattern) return true;
   if (r.domain && (t.domains || []).includes(r.domain)) return true;
   if (t.legacyTagPattern && r.tag) {
     try { if (new RegExp(t.legacyTagPattern).test(r.tag)) return true; } catch (_) {}
@@ -430,6 +452,7 @@ function matchTab(r, t) {
 function textOf(r) {
   if (r._t !== undefined) return r._t;
   const parts = [r.tag || '', r.event || '', r.msg || '', r.raw || ''];
+  if (r.payload) parts.push(r.payload.preview || '');     // 원문은 앞머리만 검색된다 (본문은 서버에 있다)
   for (const k in r.fields) parts.push(k + '=' + r.fields[k]);
   r._t = parts.join(' ');
   return r._t;
@@ -438,6 +461,7 @@ function textOf(r) {
 function passes(r) {
   if (!state.levels.has(r.level)) return false;
   if (state.onlyStruct && r.kind !== 'structured') return false;
+  if (state.onlyPayload && !r.payload) return false;
   if (!inTab(r, state.tab)) return false;
   if (state.issueFilter && !matchIssue(r)) return false;
   // 이슈를 찍어서 들어온 상태에서는 pid 필터를 적용하지 않는다.
@@ -700,7 +724,7 @@ function rowHtml(r, cols) {
                  `title="이 흐름을 타임라인으로">${esc(v)}</button></span>`;
         }
         // 마지막 필드는 남는 폭을 다 쓴다. 긴 URL 이 좁은 칸에서 여러 줄로 접히지 않게.
-        const last = i === entries.length - 1 && !r.msg;
+        const last = i === entries.length - 1 && !r.msg && !r.payload;
         const style = w ? ` style="flex:${last ? 1 : 0} 0 ${w}ch"` : '';
         return `<span class="f${isMasked(v) ? ' masked' : ''}"${style}>${esc(k)}=<b>${esc(v)}</b></span>`;
       })
@@ -709,8 +733,9 @@ function rowHtml(r, cols) {
     const cut = r.truncated ? '<span class="cut">[cut]</span>' : '';
     const go = state.cfg.eventSource
       ? `<button class="goto" data-evt="${esc(r.event)}" title="이 로그를 만든 코드로 이동">↗</button>` : '';
-    return `<div class="${cls}">${ts}${lvl}<span class="dom">${esc(r.domain)}</span>` +
-           `<span class="evt">${esc(r.event)}</span><span class="fs">${fields}${msg}${cut}${go}</span></div>`;
+    const pl = r.payload ? payloadChip(r.payload) : '';
+    return `<div class="${cls}${r.payload ? ' plrow' : ''}">${ts}${lvl}<span class="dom">${esc(r.domain)}</span>` +
+           `<span class="evt">${esc(r.event)}</span><span class="fs">${fields}${pl}${msg}${cut}${go}</span></div>`;
   }
   if (r.kind === 'unstructured') {
     return `<div class="${cls}">${ts}${lvl}<span class="tag">${esc(r.tag)}</span>` +
@@ -1039,53 +1064,6 @@ function histHtml(s) {
     '<span class="lc hint2">칸을 누르면 그 묶음의 상세. 머리글에 마우스를 올리면 묶음 이름</span></p>' +
     (rows.length ? `<div class="histwrap"><table class="hist"><thead>${head}</thead><tbody>${body}</tbody></table></div>`
                  : '<p class="nodata">일치하는 코드 없음</p>');
-}
-
-/* ── 도메인별 상세 로그 스위치 (adb) ───────────────────── */
-/* 릴리스 빌드에서도 도메인 하나만 V/D 로그를 연다 (setprop log.tag.<태그> VERBOSE).
-   기기 속성이라 뷰어를 꺼도 남는다. 그래서 하나라도 켜져 있으면 머리에 늘 보여준다. */
-async function loadVerbose() {
-  if (!state.cfg.source || state.cfg.source.kind !== 'adb') return;
-  try {
-    const res = await fetch('/api/adb/verbose');
-    if (!res.ok) throw new Error();
-    state.verbose = await res.json();
-  } catch (_) {
-    state.verbose = { available: false };
-  }
-  updateVerbose();
-}
-
-function updateVerbose() {
-  const v = state.verbose || { available: false };
-  const tab = tabOf(state.tab);
-  const doms = tab ? (tab.domains || []) : [];
-  const show = v.available && doms.length > 0;
-  $('vWrap').hidden = !show;
-  if (show) {
-    const on = doms.every((d) => v.states[d]);
-    $('vChk').checked = on;
-    $('vLabel').textContent = `${tab.label} 상세 로그(V/D) ${on ? '켜짐' : '강제 켜기'}`;
-    const long = doms.filter((d) => (v.tooLong || []).includes(d));
-    $('vWrap').title = `기기에 setprop log.tag.${v.prefix}_${doms.join('/')} VERBOSE — 릴리스 빌드에서도 이 도메인의 V/D 로그가 찍힙니다.\n` +
-      'LogLens 로그에만 적용됩니다. 기기에 남는 설정이라 뷰어를 꺼도 유지됩니다.' +
-      (long.length ? `\n⚠ 태그가 23자를 넘어 구형 기기에서는 안 먹을 수 있음: ${long.join(', ')}` : '');
-  }
-  const onList = v.available ? Object.keys(v.states || {}).filter((d) => v.states[d]) : [];
-  $('vChip').hidden = !onList.length;
-  $('vChip').textContent = `상세 로그 켜짐: ${onList.join(', ')} · 모두 끄기`;
-}
-
-async function toggleVerbose(on) {
-  const tab = tabOf(state.tab);
-  if (!tab) return;
-  let ok = true;
-  for (const d of tab.domains || []) {
-    const res = await fetch(`/api/adb/verbose?domain=${encodeURIComponent(d)}&on=${on ? 1 : 0}`, { method: 'POST' }).catch(() => null);
-    ok = ok && !!(res && res.ok);
-  }
-  toast(ok ? `${tab.label} 상세 로그를 ${on ? '켰습니다' : '껐습니다'}` : '기기에 적용하지 못했습니다', !ok);
-  loadVerbose();
 }
 
 /* ── 세션 파일 ──────────────────────────────────────── */
@@ -1490,6 +1468,8 @@ function flowHtml(d) {
       ? `<span class="tb slow" title="기준선보다 2배 이상, 200ms 이상 느림">느림 ${fmtMs(p.base)} → ${fmtMs(p.cur)} (${p.ratio}배)</span>` : '') +
       (p && p.state === 'extra' ? '<span class="tb extra">기준선에 없던 단계</span>' : '');
     const acts = (s.table ? `<button class="tl-act tl-table" data-t="${esc(s.table)}">표로 보기</button>` : '') +
+      (s.payload ? `<button class="tl-act tl-pl" data-pl="${esc(s.payload.key)}" title="요청·응답 본문을 펼쳐 보기">` +
+                   `원문 ${esc(PL_FORMAT[s.payload.format] || '')} ${fmtBytes(s.payload.bytes)}</button>` : '') +
       (state.cfg.eventSource ? `<button class="tl-act goto2" data-evt="${esc(s.event)}" title="이 로그를 만든 코드로">↗ 코드</button>` : '');
     return `<div class="${cls}"><div class="tl-time"><span>${it.i === 0 ? '시작' : '+' + fmtMs(s.delta)}</span>` +
       `<span class="tl-bar"><i style="width:${pct}%"></i></span></div>` +
@@ -1796,6 +1776,7 @@ function fmtDetail(v) {
 function closeTop() {
   if (!$('gotoMenu').hidden) { $('gotoMenu').hidden = true; return; }
   if (!$('sessMenu').hidden) { $('sessMenu').hidden = true; return; }
+  if (!$('plw').hidden) { closePayload(); return; }
   if (!$('det').hidden) { $('det').hidden = true; return; }
   if (!$('tbl').hidden) { $('tbl').hidden = true; return; }
   if (!$('flw').hidden) { $('flw').hidden = true; return; }
@@ -1887,6 +1868,334 @@ function parseLooseJson(s) {
     } catch (_) { /* 다음 후보 */ }
   }
   return undefined;
+}
+
+/* ── 원문 보기 ─────────────────────────────────────── */
+/* 요청·응답 본문을 통째로 실은 로그. 목록에는 한 줄(머리)만 있고 본문은 서버가 조각을 모아 둔다.
+   창에서는 세 가지로 본다.
+     구조         JSON·XML 을 접고 펴는 나무로
+     정리된 원문  들여쓰기만 다시 한 것. 값은 받은 글자 그대로다
+     받은 그대로  손대지 않은 본문. 빠진 조각이 있으면 그 자리를 표시한다
+   JSON 을 브라우저의 JSON.parse 로 읽지 않는 이유: 큰 정수(예: 64비트 id)가 조용히 다른 값으로
+   바뀐다. 바뀐 값을 원문이라고 보여 주면 안 되므로 글자를 그대로 든 채로 읽는다. */
+const PL_FORMAT = { json: 'JSON', xml: 'XML', text: '텍스트' };
+const PL_VIEWS = { tree: '구조', pretty: '정리된 원문', raw: '받은 그대로' };
+
+function fmtBytes(n) {
+  if (n == null) return '';
+  if (n < 1024) return `${n}B`;
+  return `${(n / 1024).toFixed(n < 10240 ? 1 : 0)}KB`;
+}
+
+/* 목록 한 줄에 붙는 단추. 받은 조각 수는 적지 않는다 — 여기 숫자는 앱이 보냈다고 한 것이고,
+   실제로 다 왔는지는 열어 봐야 안다 (창에서 말해 준다). */
+function payloadChip(pl) {
+  let label;
+  if (pl.err === 'excluded') label = '원문 (저장할 때 뺌)';
+  else if (pl.err) label = '원문 없음 (가리기 실패)';
+  else {
+    label = `원문 ${PL_FORMAT[pl.format] || ''} · ${fmtBytes(pl.bytes)}` +
+            (pl.parts > 1 ? ` · ${pl.parts}조각` : '') + (pl.cut ? ' · 뒤가 잘림' : '');
+  }
+  const prev = pl.preview ? `<span class="plprev">${esc(pl.preview.slice(0, 140))}</span>` : '';
+  return `<button class="plopen" data-pl="${esc(pl.key)}" title="본문을 형식에 맞춰 펼쳐 보기">${esc(label)} ▸</button>${prev}`;
+}
+
+async function openPayload(key) {
+  state.plw = { key, view: null, d: null, parsed: null, tries: 0 };
+  $('plTitle').textContent = '원문';
+  $('plHint').textContent = '';
+  $('plTabs').innerHTML = '';
+  $('plNote').innerHTML = '';
+  $('plFold').hidden = true;
+  $('plBody').innerHTML = '<p class="nodata">불러오는 중…</p>';
+  $('plw').hidden = false;
+  await loadPayload();
+}
+
+function closePayload() {
+  $('plw').hidden = true;
+  state.plw = null;
+}
+
+async function loadPayload() {
+  const s = state.plw;
+  if (!s) return;
+  const res = await fetch('/api/payload?key=' + encodeURIComponent(s.key)).catch(() => null);
+  if (state.plw !== s) return;                       // 그사이 닫았거나 다른 것을 열었다
+  if (!res || !res.ok) {
+    $('plBody').innerHTML = '<p class="nodata">이 원문은 뷰어가 모아 둔 것에서 밀려났습니다. ' +
+      '원문은 최근 것부터 정해진 양만 들고 있습니다.</p>';
+    return;
+  }
+  const d = await res.json();
+  const changed = !s.d || s.d.received !== d.received;
+  s.d = d;
+  if (changed) {
+    s.parsed = analyzePayload(d);
+    if (!s.view || !s.parsed.views.includes(s.view)) s.view = s.parsed.views[0];
+    renderPayload();
+  }
+  // 조각이 아직 오는 중일 수 있다. 잠깐 동안만 다시 본다.
+  if (!d.complete && !d.err && s.tries++ < 6) {
+    setTimeout(() => { if (state.plw === s) loadPayload(); }, 700);
+  }
+}
+
+/* 본문을 형식대로 읽어 본다. 못 읽으면 왜 못 읽었는지를 들고 '받은 그대로' 만 보여 준다. */
+function analyzePayload(d) {
+  const out = { format: 'text', views: ['raw'], tree: null, doc: null, why: null };
+  if (d.err || !d.text) return out;
+  if (!d.complete) { out.why = '조각이 빠져 있어 구조로 읽지 않았습니다.'; return out; }
+  const fmt = d.format;
+  try {
+    if (fmt === 'json') {
+      out.tree = parseJsonExact(d.text);
+      out.format = 'json';
+      out.views = ['tree', 'pretty', 'raw'];
+    } else if (fmt === 'xml') {
+      out.doc = parseXml(d.text);
+      out.format = 'xml';
+      out.views = ['tree', 'pretty', 'raw'];
+    }
+  } catch (e) {
+    out.why = `${PL_FORMAT[fmt]} 모양이지만 끝까지 읽지 못했습니다: ${e.message}` +
+              (d.cut ? ' (뒤가 잘린 본문이라 그렇습니다)' : '');
+  }
+  return out;
+}
+
+function renderPayload() {
+  const s = state.plw;
+  if (!s || !s.d) return;
+  const d = s.d;
+  const p = s.parsed;
+  $('plTitle').textContent = d.event || '원문';
+  const fields = Object.entries(d.fields || {}).map(([k, v]) => `${k}=${v}`).join(' ');
+  // 형식은 본문 첫 글자로 짐작한 것. 구조로 읽지 못했어도(조각 유실 등) 무엇처럼 생겼는지는 적는다.
+  $('plHint').textContent = [d.domain, d.ts ? shortTs(d.ts) : '', d.text ? PL_FORMAT[d.format] : '',
+                             fmtBytes(d.bytes), fields].filter(Boolean).join(' · ');
+  $('plTabs').innerHTML = p.views.length > 1
+    ? p.views.map((v) => `<button data-v="${v}"${v === s.view ? ' class="on"' : ''}>${PL_VIEWS[v]}</button>`).join('')
+    : '';
+  $('plTabs').hidden = p.views.length < 2;
+  $('plFold').hidden = s.view !== 'tree';
+  $('plFold').textContent = '전부 접기';
+
+  const notes = [];
+  if (d.err === 'excluded') notes.push(['warn', '이 세션 파일은 원문 본문을 빼고 저장한 것입니다. 본문을 보려면 "원문까지 넣어 저장" 한 파일이 필요합니다.']);
+  else if (d.err) notes.push(['warn', '앱의 라이브러리가 민감한 값을 가리는 데 실패해서 본문을 싣지 않았습니다.']);
+  if (d.missing && d.missing.length) {
+    notes.push(['warn', `${d.parts}조각 중 ${d.received}개만 받았습니다 — ${d.missing.join(', ')}번 조각이 없습니다. ` +
+                        'logcat 이 줄을 잃었거나 아직 오는 중입니다. 아래는 받은 부분만입니다.']);
+  }
+  if (d.cut) notes.push(['warn', `원문 ${fmtBytes(d.cut)} 중 앞 ${fmtBytes(d.bytes)} 만 기록됐습니다 (앱에 걸린 상한).`]);
+  if (d.sizeMismatch) notes.push(['warn', `앱이 알려 준 크기(${d.bytes}바이트)와 되살린 본문(${d.gotBytes}바이트)이 다릅니다. 아래 내용을 그대로 믿지 마세요.`]);
+  if (p.why) notes.push(['info', p.why]);
+  if (!d.err) notes.push(['dim', '민감한 키의 값은 앱에서 *** 로 가려져 옵니다. 가려지지 않은 개인정보가 남아 있을 수 있습니다.']);
+  $('plNote').innerHTML = notes.map(([k, t]) => `<p class="pln ${k}">${esc(t)}</p>`).join('');
+
+  let html;
+  if (s.view === 'tree') {
+    html = `<div class="jtree">${p.format === 'json' ? jsonTree(p.tree, null, 0) : xmlTree(p.doc.documentElement, 0)}</div>`;
+  } else if (s.view === 'pretty') {
+    html = `<pre class="plpre">${p.format === 'json' ? jsonPrettyHtml(p.tree, '') : esc(xmlPretty(p.doc.documentElement, ''))}</pre>`;
+  } else {
+    html = (d.segments || []).map((g) => (g.missing
+      ? `<div class="plgap">⟪ ${g.missing.join(', ')}번 조각 없음 ⟫</div>`
+      : `<pre class="plpre raw">${esc(g.text)}</pre>`)).join('') ||
+      '<p class="nodata">본문이 비어 있습니다.</p>';
+  }
+  $('plBody').innerHTML = html;
+  $('plBody').scrollTop = 0;
+}
+
+async function copyPayload() {
+  const s = state.plw;
+  if (!s || !s.d) return;
+  const p = s.parsed;
+  let text = s.d.text;
+  if (s.view !== 'raw' && p.format === 'json') text = jsonPretty(p.tree, '');
+  if (s.view !== 'raw' && p.format === 'xml') text = xmlPretty(p.doc.documentElement, '');
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(s.d.complete ? '복사했습니다' : '받은 부분만 복사했습니다 (빠진 조각이 있음)', !s.d.complete);
+  } catch (_) {
+    toast('복사하지 못했습니다', true);
+  }
+}
+
+/* JSON 을 글자 그대로 든 채로 읽는다. 숫자와 문자열은 원문의 토막(raw)을 그대로 갖는다. */
+function parseJsonExact(src) {
+  let i = 0;
+  const n = src.length;
+  const fail = (m) => { throw new Error(`${m} (${i + 1}번째 글자)`); };
+  const ws = () => { while (i < n && (src[i] === ' ' || src[i] === '\t' || src[i] === '\n' || src[i] === '\r')) i++; };
+  const str = () => {
+    const start = i++;
+    while (i < n) {
+      const c = src[i];
+      if (c === '\\') i += 2;
+      else if (c === '"') { i++; return src.slice(start, i); }
+      else i++;
+    }
+    return fail('문자열이 닫히지 않았습니다');
+  };
+  const val = (depth) => {
+    if (depth > 300) fail('너무 깊게 겹쳐 있습니다');
+    ws();
+    const c = src[i];
+    if (c === '{' || c === '[') {
+      const obj = c === '{';
+      const close = obj ? '}' : ']';
+      const items = [];
+      i++;
+      ws();
+      if (src[i] === close) { i++; return { t: obj ? 'obj' : 'arr', items }; }
+      for (;;) {
+        ws();
+        if (obj) {
+          if (src[i] !== '"') fail('키가 와야 합니다');
+          const k = str();
+          ws();
+          if (src[i] !== ':') fail(': 가 와야 합니다');
+          i++;
+          items.push([k, val(depth + 1)]);
+        } else {
+          items.push(val(depth + 1));
+        }
+        ws();
+        if (src[i] === ',') { i++; continue; }
+        if (src[i] === close) { i++; return { t: obj ? 'obj' : 'arr', items }; }
+        fail(`, 나 ${close} 가 와야 합니다`);
+      }
+    }
+    if (c === '"') return { t: 'str', raw: str() };
+    const m = /^(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)/.exec(src.slice(i, i + 400));
+    if (!m) fail('값이 와야 합니다');
+    i += m[0].length;
+    return { t: /^[-\d]/.test(m[0]) ? 'num' : 'lit', raw: m[0] };
+  };
+  const root = val(0);
+  ws();
+  if (i < n) fail('끝난 뒤에 글자가 더 있습니다');
+  return root;
+}
+
+/* 따옴표째 든 문자열 토막 → 사람이 읽는 글자. 문자열은 JSON.parse 로 풀어도 값이 바뀌지 않는다. */
+function strOf(raw) {
+  try { return JSON.parse(raw); } catch (_) { return raw.slice(1, -1); }
+}
+
+function jsonPretty(node, ind) {
+  if (node.t !== 'obj' && node.t !== 'arr') return node.raw;
+  if (!node.items.length) return node.t === 'obj' ? '{}' : '[]';
+  const p = ind + '  ';
+  const rows = node.t === 'obj'
+    ? node.items.map(([k, v]) => `${p}${k}: ${jsonPretty(v, p)}`)
+    : node.items.map((v) => p + jsonPretty(v, p));
+  return (node.t === 'obj' ? '{\n' : '[\n') + rows.join(',\n') + '\n' + ind + (node.t === 'obj' ? '}' : ']');
+}
+
+function jsonLeafHtml(node) {
+  if (node.t === 'str') return `<span class="js${node.raw === '"***"' ? ' masked' : ''}">${esc(node.raw)}</span>`;
+  return `<span class="${node.t === 'num' ? 'jn' : 'jl'}">${esc(node.raw)}</span>`;
+}
+
+function jsonPrettyHtml(node, ind) {
+  if (node.t !== 'obj' && node.t !== 'arr') return jsonLeafHtml(node);
+  if (!node.items.length) return node.t === 'obj' ? '{}' : '[]';
+  const p = ind + '  ';
+  const rows = node.t === 'obj'
+    ? node.items.map(([k, v]) => `${p}<span class="jk">${esc(k)}</span>: ${jsonPrettyHtml(v, p)}`)
+    : node.items.map((v) => p + jsonPrettyHtml(v, p));
+  return (node.t === 'obj' ? '{\n' : '[\n') + rows.join(',\n') + '\n' + ind + (node.t === 'obj' ? '}' : ']');
+}
+
+/* 접고 펴는 나무. 위 두 단계는 펴고 그 아래는 접어 둔다 — 긴 목록이 한 화면을 다 먹지 않게. */
+function jsonTree(node, key, depth) {
+  const k = key === null ? '' : `<span class="jk">${esc(key)}</span><span class="jc">:</span> `;
+  if (node.t === 'obj' || node.t === 'arr') {
+    const n = node.items.length;
+    if (!n) return `<div class="jleaf">${k}<span class="jl">${node.t === 'obj' ? '{}' : '[]'}</span></div>`;
+    const kids = node.t === 'obj'
+      ? node.items.map(([kk, v]) => jsonTree(v, strOf(kk), depth + 1))
+      : node.items.map((v, idx) => jsonTree(v, String(idx), depth + 1));
+    const sum = node.t === 'obj' ? `{ } ${n}개` : `[ ] ${n}개`;
+    return `<details class="jnode"${depth < 2 ? ' open' : ''}><summary>${k}<span class="jsum">${sum}</span></summary>` +
+           `<div class="jkids">${kids.join('')}</div></details>`;
+  }
+  if (node.t === 'str') {
+    const v = strOf(node.raw);
+    // 문자열 안에 JSON 이 통째로 들어 있는 경우(jsonData 등). 한 번 더 풀어서 보여 준다.
+    if (typeof v === 'string' && /^\s*[{[]/.test(v) && v.length > 2) {
+      try {
+        const inner = parseJsonExact(v);
+        return `<details class="jnode"${depth < 2 ? ' open' : ''}><summary>${k}<span class="jsum">문자열 안의 JSON</span></summary>` +
+               `<div class="jkids">${jsonTree(inner, null, depth + 1)}</div></details>`;
+      } catch (_) { /* JSON 이 아니면 그냥 문자열로 */ }
+    }
+    return `<div class="jleaf">${k}<span class="js${v === '***' ? ' masked' : ''}">${esc(v)}</span></div>`;
+  }
+  return `<div class="jleaf">${k}${jsonLeafHtml(node)}</div>`;
+}
+
+/* XML 은 브라우저가 읽는다. 읽은 결과를 화면에 그대로 붙이지 않고 글자만 꺼내 쓴다. */
+function parseXml(src) {
+  const doc = new DOMParser().parseFromString(src.replace(/^\s+/, ''), 'application/xml');
+  const err = doc.getElementsByTagName('parsererror')[0];
+  if (err) throw new Error((err.textContent || '').trim().split('\n')[0].slice(0, 160));
+  return doc;
+}
+
+function xmlKids(el) {
+  const out = [];
+  for (const c of el.childNodes) {
+    if (c.nodeType === 1) out.push(c);
+    else if ((c.nodeType === 3 || c.nodeType === 4) && c.nodeValue.trim()) out.push(c);
+    else if (c.nodeType === 8) out.push(c);
+  }
+  return out;
+}
+
+const xmlAttrs = (el) => [...el.attributes];
+
+function xmlTree(el, depth) {
+  const attrs = xmlAttrs(el).map((a) =>
+    ` <span class="xa">${esc(a.name)}</span>=<span class="js${a.value === '***' ? ' masked' : ''}">"${esc(a.value)}"</span>`).join('');
+  const open = `<span class="xt">&lt;${esc(el.nodeName)}</span>${attrs}<span class="xt">&gt;</span>`;
+  const kids = xmlKids(el);
+  if (!kids.length) return `<div class="jleaf">${open}</div>`;
+  if (kids.length === 1 && kids[0].nodeType !== 1 && kids[0].nodeType !== 8) {
+    const v = kids[0].nodeValue.trim();
+    return `<div class="jleaf">${open} <span class="js${v === '***' ? ' masked' : ''}">${esc(v)}</span></div>`;
+  }
+  const body = kids.map((c) => {
+    if (c.nodeType === 1) return xmlTree(c, depth + 1);
+    if (c.nodeType === 8) return `<div class="jleaf"><span class="xc">&lt;!-- ${esc(c.nodeValue.trim())} --&gt;</span></div>`;
+    return `<div class="jleaf"><span class="js">${esc(c.nodeValue.trim())}</span></div>`;
+  }).join('');
+  const n = kids.filter((c) => c.nodeType === 1).length;
+  return `<details class="jnode"${depth < 2 ? ' open' : ''}><summary>${open}<span class="jsum">${n}개</span></summary>` +
+         `<div class="jkids">${body}</div></details>`;
+}
+
+const xmlEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function xmlPretty(el, ind) {
+  const attrs = xmlAttrs(el).map((a) => ` ${a.name}="${xmlEsc(a.value).replace(/"/g, '&quot;')}"`).join('');
+  const kids = xmlKids(el);
+  if (!kids.length) return `${ind}<${el.nodeName}${attrs}/>`;
+  if (kids.length === 1 && kids[0].nodeType !== 1 && kids[0].nodeType !== 8) {
+    return `${ind}<${el.nodeName}${attrs}>${xmlEsc(kids[0].nodeValue.trim())}</${el.nodeName}>`;
+  }
+  const p = ind + '  ';
+  const body = kids.map((c) => {
+    if (c.nodeType === 1) return xmlPretty(c, p);
+    if (c.nodeType === 8) return `${p}<!--${c.nodeValue}-->`;
+    return p + xmlEsc(c.nodeValue.trim());
+  }).join('\n');
+  return `${ind}<${el.nodeName}${attrs}>\n${body}\n${ind}</${el.nodeName}>`;
 }
 
 /* ── 대시보드 ──────────────────────────────────────── */

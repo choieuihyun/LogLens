@@ -696,20 +696,44 @@ body.viewing-session .dot{ background:var(--accent2) !important; box-shadow:none
   border:2px dashed var(--accent); border-radius:16px; padding:40px 60px;
   color:var(--fg); font-size:16px; background:var(--bg2);
 }
-.chip-warn{
-  background:rgba(251,191,36,.14); color:var(--w); border:1px solid rgba(251,191,36,.45);
-  border-radius:12px; padding:3px 10px; font-size:11.5px; cursor:pointer; font-family:inherit;
-}
-.chip-warn:hover{ background:rgba(251,191,36,.25) }
-/* 스위치: 체크박스를 토글 모양으로 */
-.vtoggle{ display:flex; align-items:center; gap:7px; cursor:pointer; color:var(--dim); font-size:12px; white-space:nowrap }
-.vtoggle input{ display:none }
-.vtoggle .sw{ position:relative; width:30px; height:17px; border-radius:10px; background:var(--bg3); border:1px solid var(--line); flex:0 0 auto }
-.vtoggle .sw::after{ content:''; position:absolute; top:2px; left:2px; width:11px; height:11px; border-radius:50%; background:var(--dim); transition:left .15s, background .15s }
-.vtoggle input:checked + .sw{ background:rgba(251,191,36,.25); border-color:var(--w) }
-.vtoggle input:checked + .sw::after{ left:15px; background:var(--w) }
-.vtoggle input:checked ~ span:last-child{ color:var(--w) }
 .ctxsum{ color:var(--dim) }
 .ctxsum b.e{ color:var(--e); font-weight:600 }
 .ctxw{ background:none; border:1px solid var(--line); border-radius:10px; padding:0 8px; color:var(--w); cursor:pointer; font:inherit; font-size:11.5px }
 .ctxw:hover, .ctxw.on{ border-color:var(--w); background:rgba(251,191,36,.12) }
+
+/* ── 원문 보기 ──────────────────────────────────────── */
+.plopen{
+  flex:0 0 auto; background:rgba(139,92,246,.14); color:#c4b5fd; border:1px solid rgba(139,92,246,.45);
+  border-radius:10px; padding:0 9px; font:inherit; font-size:11.5px; cursor:pointer; white-space:nowrap;
+}
+.plopen:hover{ background:rgba(139,92,246,.28); color:#fff }
+.plprev{ flex:1 1 0; min-width:0; color:var(--dim2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.pl-inner{ max-width:min(1100px, 95vw) }
+.pl-inner #plTitle{ font-family:var(--mono); font-size:16px; color:#e2e8f0 }
+.pl-note{ margin-top:-6px }
+.pln{ margin:8px 0 0; padding:7px 11px; border-radius:6px; font-size:12px; line-height:1.5 }
+.pln.warn{ background:rgba(251,191,36,.10); color:var(--w); border:1px solid rgba(251,191,36,.35) }
+.pln.info{ background:var(--bg3); color:var(--fg); border:1px solid var(--line) }
+.pln.dim{ color:var(--dim2); padding:2px 0 }
+.pl-body{ padding-top:14px; font-family:var(--mono); font-size:12.5px }
+.plpre{ margin:0; white-space:pre-wrap; word-break:break-word; line-height:1.55; color:var(--fg) }
+.plpre.raw{ color:#d7dee9 }
+.plgap{
+  margin:8px 0; padding:6px 10px; text-align:center; color:var(--w);
+  border:1px dashed rgba(251,191,36,.5); border-radius:6px; font-family:inherit;
+}
+.jtree{ line-height:1.6 }
+.jnode > summary{ cursor:pointer; list-style-position:outside; margin-left:14px }
+.jnode > summary:hover{ background:var(--bg3) }
+.jkids{ margin-left:14px; padding-left:12px; border-left:1px solid var(--line) }
+.jleaf{ margin-left:14px; white-space:pre-wrap; word-break:break-word }
+.jk{ color:#7dd3fc }
+.jc{ color:var(--dim2) }
+.js{ color:#bef264 }
+.js.masked{ color:var(--dim2); font-style:italic }
+.jn{ color:#fdba74 }
+.jl{ color:#c4b5fd }
+.jsum{ color:var(--dim2); font-size:11.5px; margin-left:4px }
+.xt{ color:#7dd3fc }
+.xa{ color:#fdba74 }
+.xc{ color:var(--dim2) }
