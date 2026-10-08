@@ -10,6 +10,9 @@ class ConsoleSink @JvmOverloads constructor(
     private val out: PrintStream = System.out,
 ) : Sink {
 
+    /** 화면에 흘러가고 남지 않습니다. 원문을 받습니다. */
+    override fun acceptsPayload(): Boolean = true
+
     override fun write(level: Level, tag: String, body: String) {
         out.println(LineFormat.render(level, tag, body))
         out.flush()

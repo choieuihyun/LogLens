@@ -5,9 +5,12 @@ enum class Level(@JvmField val c: Char) {
     V('V'), D('D'), I('I'), W('W'), E('E');
 
     /**
-     * 릴리스에서 V/D 를 막습니다. I/W/E 는 항상 통과합니다.
+     * 기본 정책([ReleasePolicy.SILENT])에서 이 레벨이 나가는가 — 디버그면 전부, 릴리스면 아무것도.
      *
-     * 라이브러리는 앱의 빌드 타입을 알 수 없으므로 [isDebug] 를 주입받습니다.
+     * 예전에는 릴리스에서도 I/W/E 를 통과시켰습니다. 지금은 릴리스 출력을 앱이 [ReleasePolicy] 로
+     * 직접 고르므로, 레벨만으로는 답할 수 없습니다. [LogLens] 도 더 이상 이 메서드를 쓰지 않습니다.
+     * (docs/DECISIONS.md D24)
      */
-    fun enabled(isDebug: Boolean): Boolean = isDebug || ordinal >= I.ordinal
+    @Deprecated("릴리스 출력은 ReleasePolicy 가 정합니다.", ReplaceWith("isDebug"))
+    fun enabled(isDebug: Boolean): Boolean = isDebug
 }

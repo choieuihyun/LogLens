@@ -8,6 +8,8 @@ class MemorySink : Sink {
     private val _lines = Collections.synchronizedList(mutableListOf<String>())
     private val _bodies = Collections.synchronizedList(mutableListOf<String>())
 
+    override fun acceptsPayload(): Boolean = true
+
     override fun write(level: Level, tag: String, body: String) {
         _bodies.add(body)
         _lines.add(LineFormat.render(level, tag, body))

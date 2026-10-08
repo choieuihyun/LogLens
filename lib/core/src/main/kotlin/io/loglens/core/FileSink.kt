@@ -18,12 +18,17 @@ import java.util.Locale
  * @param dir      로그를 둘 디렉터리
  * @param prefix   파일 이름 앞부분 → `app-2026-08-12.log`
  * @param keepDays 이 일수보다 오래된 파일은 지웁니다 (0 이면 안 지웁니다)
+ * @param withPayload 원문(요청·응답 본문)도 파일에 남길지. 기본은 남기지 않습니다 —
+ *                 원문에는 개인정보가 섞일 수 있고, 파일은 기기에 며칠씩 남습니다
  */
 class FileSink @JvmOverloads constructor(
     private val dir: File,
     private val prefix: String = "app",
     private val keepDays: Int = 7,
+    private val withPayload: Boolean = false,
 ) : Sink {
+
+    override fun acceptsPayload(): Boolean = withPayload
 
     private var currentDay: String? = null
     private var writer: BufferedWriter? = null

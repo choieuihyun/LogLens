@@ -15,11 +15,16 @@ import io.loglens.core.Sink
 class LogcatSink : Sink {
 
     /**
-     * `adb shell setprop log.tag.UC_CHAT VERBOSE` 로 켜 둔 도메인은 릴리스에서도 통과시킵니다.
-     * 앱을 다시 빌드하지 않고 특정 도메인만 상세 로그를 켤 수 있습니다.
+     * `adb shell setprop log.tag.UC_CHAT VERBOSE` 로 켜 둔 도메인인가.
+     *
+     * 앱이 릴리스 정책에서 런타임 스위치를 허용했을 때만 쓰입니다
+     * (`ReleasePolicy.withRuntimeSwitch()`). 기본 정책에서는 릴리스에서 아무것도 나가지 않습니다.
      */
     override fun isForcedOn(level: Level, tag: String): Boolean =
         Log.isLoggable(tag, priorityOf(level))
+
+    /** logcat 은 링버퍼라 기기에 오래 남지 않습니다. 원문을 받습니다 (디버그 빌드에서만 옵니다). */
+    override fun acceptsPayload(): Boolean = true
 
     override fun write(level: Level, tag: String, body: String) {
         when (level) {

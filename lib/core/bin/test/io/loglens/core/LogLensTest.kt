@@ -19,7 +19,7 @@ class LogLensTest {
     @BeforeTest
     fun setUp() {
         LogLens.clearSinks()
-        LogLens.init(false)
+        LogLens.init(true)       // 형식을 보는 테스트는 줄이 나가야 한다. 릴리스 동작은 아래에서 따로 본다
         LogLens.addSink(sink)
     }
 
@@ -27,19 +27,24 @@ class LogLensTest {
     fun tearDown() = LogLens.clearSinks()
 
     @Test
-    fun `릴리스에서는 V 와 D 가 안 나가고 I 만 나간다`() {
+    fun `릴리스에서는 어떤 레벨도 나가지 않는다`() {
+        LogLens.init(false)
         LogLens.v(D.AUTH, "TRACE")
         LogLens.d(D.AUTH, "DEBUG")
         LogLens.i(D.AUTH, "LOGIN_OK", "uid", 1)
-        assertEquals(1, sink.size)
+        LogLens.w(D.AUTH, "SLOW")
+        LogLens.e(D.AUTH, "BOOM", IllegalStateException("nope"), "uid" to 7)
+        assertEquals(0, sink.size, sink.bodies().toString())
     }
 
     @Test
-    fun `디버그에서는 V 와 D 도 나간다`() {
-        LogLens.init(true)
+    fun `디버그에서는 모든 레벨이 나간다`() {
         LogLens.v(D.AUTH, "TRACE")
         LogLens.d(D.AUTH, "DEBUG")
-        assertEquals(2, sink.size)
+        LogLens.i(D.AUTH, "LOGIN_OK", "uid", 1)
+        LogLens.w(D.AUTH, "SLOW")
+        LogLens.e(D.AUTH, "BOOM")
+        assertEquals(5, sink.size)
     }
 
     @Test
@@ -100,53 +105,103 @@ class LogLensTest {
         assertFalse(LogLens.isDebug())
     }
 
-    // ── 런타임으로 특정 도메인만 켜기 ──────────────────────────────────────
-    // 릴리스에서 V/D 는 막히지만, 현장에서 "채팅만 상세 로그 보내주세요" 같은 요청이
-    // 옵니다. 앱을 다시 빌드하지 않고 켜려면 출력 대상이 스스로 판단할 수 있어야 합니다.
-    // logcat 쪽은 이걸 Log.isLoggable 로 구현해서 setprop 한 줄로 열립니다.
+    // ── 릴리스 정책 ─────────────────────────────────────────────────────────
+    // 기본은 "릴리스에서는 아무것도". 앱이 초기화할 때 직접 골라야만 열립니다.
 
-    /** 특정 태그만 강제로 통과시키는 가짜 출력 대상 */
-    private class ForcingSink(private val openTag: String) : Sink {
+    /** 특정 태그만 강제로 통과시키는 가짜 출력 대상 (logcat 의 setprop 을 흉내냅니다) */
+    private class ForcingSink(private val openTag: String?) : Sink {
         val got = mutableListOf<String>()
-        override fun isForcedOn(level: Level, tag: String) = tag == openTag
+        override fun isForcedOn(level: Level, tag: String) = openTag == null || tag == openTag
+        override fun acceptsPayload() = true
         override fun write(level: Level, tag: String, body: String) {
-            got += "$tag|$body"
+            got += "${level.c}|$tag|$body"
         }
     }
 
-    @Test
-    fun `릴리스에서도 런타임으로 켠 도메인은 통과한다`() {
-        val forcing = ForcingSink(openTag = "APP_AUTH")
+    private fun release(policy: ReleasePolicy?, sink: Sink) {
         LogLens.clearSinks()
-        LogLens.init(false)          // 릴리스
-        LogLens.addSink(forcing)
-
-        LogLens.d(D.AUTH, "OPENED")       // 켜 둔 도메인 → 통과해야 함
-        LogLens.d(D.FILE_XFER, "BLOCKED") // 안 켠 도메인 → 막혀야 함
-
-        assertEquals(1, forcing.got.size, forcing.got.toString())
-        assertTrue(forcing.got[0].startsWith("APP_AUTH|evt=OPENED"), forcing.got[0])
+        if (policy == null) LogLens.init(false) else LogLens.init(false, policy)
+        LogLens.addSink(sink)
     }
 
     @Test
-    fun `런타임으로 켜지 않으면 릴리스에서 V 와 D 는 그대로 막힌다`() {
-        LogLens.clearSinks()
-        LogLens.init(false)
-        LogLens.addSink(sink)         // isForcedOn 기본값 false
+    fun `기본 정책에서는 출력 대상이 강제로 켜도 아무것도 나가지 않는다`() {
+        val forcing = ForcingSink(openTag = null)
+        release(null, forcing)
 
-        LogLens.v(D.AUTH, "TRACE")
-        LogLens.d(D.AUTH, "DEBUG")
-        assertEquals(0, sink.size)
-    }
-
-    @Test
-    fun `켜 두지 않아도 I 이상은 항상 나간다`() {
-        val forcing = ForcingSink(openTag = "없는태그")
-        LogLens.clearSinks()
-        LogLens.init(false)
-        LogLens.addSink(forcing)
-
+        LogLens.d(D.AUTH, "OPENED")
         LogLens.i(D.AUTH, "ALWAYS")
-        assertEquals(1, forcing.got.size)
+        LogLens.e(D.FILE_XFER, "BOOM")
+
+        assertEquals(0, forcing.got.size, forcing.got.toString())
+        assertTrue(LogLens.releasePolicy().isSilent())
+    }
+
+    @Test
+    fun `레벨을 연 정책에서는 그 레벨부터 나간다`() {
+        val forcing = ForcingSink(openTag = null)
+        release(ReleasePolicy.WARN_AND_ABOVE, forcing)
+
+        LogLens.d(D.AUTH, "DEBUG")
+        LogLens.i(D.AUTH, "INFO")
+        LogLens.w(D.AUTH, "WARN")
+        LogLens.e(D.AUTH, "ERROR")
+
+        assertEquals(listOf("W|APP_AUTH|evt=WARN", "E|APP_AUTH|evt=ERROR"), forcing.got,
+            "스위치를 허용하지 않았으므로 출력 대상이 켜 달라고 해도 D, I 는 안 나간다")
+    }
+
+    @Test
+    fun `런타임 스위치를 허용하면 켜 둔 도메인만 열린다`() {
+        val forcing = ForcingSink(openTag = "APP_AUTH")
+        release(ReleasePolicy.SILENT.withRuntimeSwitch(), forcing)
+
+        LogLens.d(D.AUTH, "OPENED")       // 켜 둔 도메인 → 통과
+        LogLens.d(D.FILE_XFER, "BLOCKED") // 안 켠 도메인 → 막힘
+        LogLens.e(D.FILE_XFER, "BLOCKED_TOO")
+
+        assertEquals(listOf("D|APP_AUTH|evt=OPENED"), forcing.got)
+    }
+
+    @Test
+    fun `init 을 다시 부르면 정책은 기본값으로 돌아간다`() {
+        val forcing = ForcingSink(openTag = null)
+        release(ReleasePolicy.INFO_AND_ABOVE.withRuntimeSwitch(), forcing)
+        LogLens.init(false)
+        LogLens.e(D.AUTH, "BOOM")
+        assertEquals(0, forcing.got.size)
+    }
+
+    @Test
+    fun `출력 대상이 물음에 예외로 답해도 앱은 안 죽는다`() {
+        val exploding = object : Sink {
+            override fun isForcedOn(level: Level, tag: String): Boolean = error("스위치 확인 폭발")
+            override fun acceptsPayload(): Boolean = error("원문 확인 폭발")
+            override fun write(level: Level, tag: String, body: String) = error("여기까지 오면 안 된다")
+        }
+        val ok = ForcingSink(openTag = null)
+
+        LogLens.clearSinks()
+        LogLens.init(false, ReleasePolicy.SILENT.withRuntimeSwitch())
+        LogLens.addSink(exploding)
+        LogLens.addSink(ok)
+        LogLens.d(D.AUTH, "SWITCHED")                 // isForcedOn 이 터져도 다른 출력 대상은 받는다
+
+        LogLens.init(true)
+        LogLens.payload(D.AUTH, "RES_BODY", "본문")   // acceptsPayload 가 터져도 마찬가지
+
+        assertEquals(listOf("D|APP_AUTH|evt=SWITCHED"), ok.got.take(1))
+        assertEquals(2, ok.got.size, ok.got.toString())
+    }
+
+    @Test
+    fun `원문은 어떤 정책에서도 릴리스에서 나가지 않는다`() {
+        val forcing = ForcingSink(openTag = null)
+        release(ReleasePolicy.INFO_AND_ABOVE.withRuntimeSwitch(), forcing)
+
+        LogLens.payload(D.AUTH, "RES_BODY", "{\"a\":1}")
+        LogLens.i(D.AUTH, "SUMMARY")
+
+        assertEquals(listOf("I|APP_AUTH|evt=SUMMARY"), forcing.got, "요약 로그는 나가도 원문은 안 나간다")
     }
 }

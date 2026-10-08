@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import io.loglens.core.FileSink
 import io.loglens.core.LogLens
+import io.loglens.core.ReleasePolicy
 import java.io.File
 
 /**
@@ -13,8 +14,9 @@ import java.io.File
  * class App : Application() {
  *     override fun onCreate() {
  *         super.onCreate()
- *         LogLensAndroid.install(this)          // logcat 만
+ *         LogLensAndroid.install(this)          // logcat 만. 릴리스에서는 아무것도 안 나감
  *         // LogLensAndroid.install(this, true) // + 날짜별 파일
+ *         // LogLensAndroid.install(this, false, ReleasePolicy.WARN_AND_ABOVE) // 릴리스에서 W, E 를 받아야 할 때
  *     }
  * }
  * ```
@@ -32,8 +34,12 @@ object LogLensAndroid {
 
     @JvmStatic
     @JvmOverloads
-    fun install(ctx: Context, withFileSink: Boolean = false) {
-        LogLens.init(isDebuggable(ctx))
+    fun install(
+        ctx: Context,
+        withFileSink: Boolean = false,
+        release: ReleasePolicy = ReleasePolicy.SILENT,
+    ) {
+        LogLens.init(isDebuggable(ctx), release)
         LogLens.addSink(LogcatSink())
         if (withFileSink) {
             LogLens.addSink(FileSink(File(ctx.filesDir, "loglens"), "app", 7))
