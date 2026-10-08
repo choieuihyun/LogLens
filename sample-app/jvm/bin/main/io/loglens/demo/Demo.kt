@@ -28,7 +28,8 @@ fun main(args: Array<String>) {
 
     arg(args, "--out")?.let { out ->
         val f = File(out)
-        LogLens.addSink(FileSink(f.parentFile ?: File("."), f.nameWithoutExtension, 7))
+        // 데모 파일은 뷰어가 바로 읽으라고 만드는 것이라 원문도 남깁니다. 앱의 파일 로그는 기본이 "안 남김" 입니다.
+        LogLens.addSink(FileSink(f.parentFile ?: File("."), f.nameWithoutExtension, 7, true))
     }
 
     val loops = arg(args, "--loops")?.toInt() ?: 40
@@ -103,10 +104,24 @@ private fun network() {
         )
         return
     }
+    val flowId = "n${1000 + rnd.nextInt(9000)}"
     LogLens.d(
         AppDomain.NET, "REQUEST_OK",
-        "host" to "api.example.test", "code" to 200, "ms" to (20 + rnd.nextInt(880)),
+        "flowId" to flowId, "host" to "api.example.test", "code" to 200, "ms" to (20 + rnd.nextInt(880)),
     )
+    // 응답 본문은 요약 로그와 다른 이벤트 이름으로, 같은 flowId 를 달아 통째로 남깁니다.
+    // 길면 라이브러리가 여러 줄로 나누고 뷰어가 다시 합칩니다. 본문 안의 mobile 은 가려집니다.
+    LogLens.payload(AppDomain.NET, "RESPONSE_BODY", addressBook(1 + rnd.nextInt(if (rnd.nextInt(4) == 0) 120 else 6)), "flowId" to flowId)
+}
+
+/** 주소록 응답처럼 생긴 JSON. 가끔은 한 줄 한도를 훌쩍 넘습니다. */
+private fun addressBook(n: Int): String = buildString {
+    append("{\"result\":\"ok\",\"memo\":\"첫 줄\\n둘째 줄\",\"list\":[")
+    repeat(n) { i ->
+        if (i > 0) append(',')
+        append("{\"uid\":${100 + i},\"name\":\"사용자 ${i + 1}\",\"dept\":\"개발 ${1 + i % 4}팀\",\"mobile\":\"010-0000-${1000 + i}\"}")
+    }
+    append("]}")
 }
 
 private fun upload() {

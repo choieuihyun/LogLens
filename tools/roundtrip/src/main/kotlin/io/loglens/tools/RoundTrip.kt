@@ -5,6 +5,7 @@ import io.loglens.core.Level
 import io.loglens.core.LineFormat
 import io.loglens.core.LogDomain
 import io.loglens.core.Masker
+import io.loglens.core.Payload
 import io.loglens.core.Sanitizer
 import io.loglens.core.Truncator
 import java.io.FileDescriptor
@@ -28,6 +29,15 @@ import java.io.PrintStream
  * LINE   <완성된 한 줄>
  * ```
  * `tools/roundtrip/verify.py` 가 이걸 받아 파싱하고 CANON 과 대조합니다.
+ *
+ * 원문(PAYLOAD) 케이스는 LINE 이 여러 줄입니다. 뷰어가 조각을 모아 되살린 본문이
+ * 입력과 같은지 봅니다. 본문에는 줄바꿈이 들어 있을 수 있어서 CANON 에는 16진수로 싣습니다:
+ * ```
+ * CASE   <이름>   PAYLOAD
+ * CANON  <domain>|<event>|<k=v,k=v>|<기대 본문의 UTF-8 16진수>|<plCut 또는 빈칸>
+ * LINE   <조각 1>
+ * LINE   <조각 2> ...
+ * ```
  *
  * CANON 은 Formatter 의 출력을 되읽어서 만들지 않고 **입력값에서 따로 계산합니다.**
  * 그래야 비교에 의미가 있습니다.
@@ -86,6 +96,49 @@ fun main() {
     emitTrunc("긴 한글", Level.V, D.NET, "TRACE", "payload", "한글".repeat(4000))
     emitTrunc("긴 이모지", Level.V, D.NET, "TRACE", "payload", "👍".repeat(3000))
     emitTrunc("긴 메시지", Level.V, D.NET, "TRACE", "msg", "긴 메시지 ".repeat(2000))
+
+    // ── 원문: 잘리지 않고 여러 줄로 나뉘어, 뷰어에서 글자 하나 안 틀리고 돌아와야 합니다 ──
+    emitPayload("원문: 짧은 JSON", D.NET, "RES_BODY", "{\"result\":\"ok\"}", null, null, "flowId", "f1")
+    emitPayload("원문: 필드 없음", D.NET, "RES_BODY", "<a b=\"1\">텍스트</a>")
+    emitPayload("원문: 빈 본문", D.NET, "RES_BODY", "")
+    emitPayload("원문: 원래 있던 백슬래시 n 과 진짜 줄바꿈", D.NET, "RES_BODY",
+        "{\"memo\":\"첫줄\\n둘째줄\",\"path\":\"C:\\\\dir\"}\n  들여쓴\t줄\r\n끝")
+    emitPayload("원문: 앞뒤 공백과 파이프", D.NET, "RES_BODY", "  앞 | 가운데 | 뒤 \u00A0")
+    emitPayload("원문: 줄을 가르는 글자와 제어문자", D.NET, "RES_BODY", "a\u2028b\u2029c\u0085d\u0001e\u000Bf")
+    emitPayload("원문: 잘림 표시로 끝나는 본문", D.NET, "RES_BODY", "말줄임...[cut]")
+    emitPayload("원문: evt= 로 시작하는 본문", D.NET, "RES_BODY", "evt=FAKE k=v | 가짜")
+    emitPayload("원문: 한글과 이모지 여러 조각", D.NET, "LIST_BODY",
+        (1..700).joinToString(",\n") { "{\"이름\":\"홍길동$it\",\"반응\":\"👍🏻\",\"메모\":\"a \\\\ b\"}" },
+        null, null, "flowId", "f2", "name", "내 문서")
+    // 조각 경계가 글자마다 한 번씩 걸리게 길이를 조금씩 바꿉니다. 한 줄에 딱 맞는 경우도 이 안에 있습니다.
+    for (n in 3660..3760 step 4) {
+        emitPayload("원문: 한 줄 경계 $n", D.NET, "EDGE_BODY", "가".repeat(40) + "x".repeat(n - 120) + " 끝")
+    }
+    for (n in 0..5) {
+        emitPayload("원문: 공백에서 갈림 $n", D.NET, "EDGE_BODY", "y".repeat(n) + "ab ".repeat(2600))
+    }
+    emitPayload("원문: 본문 안 민감 키", D.AUTH, "PROFILE_BODY",
+        "{\"uid\":7,\"token\":\"eyJhbGciOi.abc\",\"mobile\":\"010-1234-5678\",\"authType\":\"oauth2\"}",
+        "{\"uid\":7,\"token\":\"***\",\"mobile\":\"***\",\"authType\":\"oauth2\"}", null,
+        "token", "필드의 토큰도 가려진다")
+    emitPayload("원문: 상한을 넘으면 뒤를 버린다", D.NET, "HUGE_BODY",
+        "가".repeat(30_000), "가".repeat(Payload.DEFAULT_MAX_TOTAL_BYTES / 3), 90_000)
+}
+
+/**
+ * 원문 케이스. 기대 본문은 **입력에서** 정합니다 — 가려지거나 잘리는 경우만 따로 적습니다.
+ */
+private fun emitPayload(
+    name: String, domain: D, event: String, text: String,
+    expected: String? = null, expectedCut: Int? = null, vararg kv: Any?,
+) {
+    val want = expected ?: text
+    val hex = want.toByteArray(Charsets.UTF_8).joinToString("") { "%02x".format(it) }
+    out.println("CASE\t$name\tPAYLOAD")
+    out.println("CANON\t${canon(domain, event, null, kv).substringBeforeLast('|')}|$hex|${expectedCut ?: ""}")
+    for (body in F.payload(event, text, kv)) {
+        out.println("LINE\t${LineFormat.render(Level.D, domain.tag(), body)}")
+    }
 }
 
 private fun emit(name: String, lv: Level, domain: D, event: String, t: Throwable?, vararg kv: Any?) {

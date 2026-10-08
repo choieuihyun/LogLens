@@ -25,5 +25,11 @@ public final class JavaCallSite {
                 "host", "api.example.test", "code", 500);
 
         LogLens.d(AppDomainJava.CHAT, "ROOM_ENTER");
+
+        // 원문(응답 본문)도 같은 모양입니다. 필드가 없을 때와 있을 때 둘 다 컴파일되어야 합니다.
+        LogLens.payload(AppDomainJava.CHAT, "ROOM_INFO_BODY", "{\"room\":3,\"members\":[\"kim\",\"lee\"]}");
+        LogLens.payload(AppDomainJava.CHAT, "ROOM_INFO_BODY",
+                "<room id=\"3\"><member>kim</member><member>lee</member></room>",
+                "room", 3);
     }
 }
