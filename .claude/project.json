@@ -13,7 +13,7 @@
       "viewer/pyproject.toml",
       "lib/settings.gradle.kts"
     ],
-    "build": "python3 -m compileall -q viewer/loglens viewer/tests tools && (cd viewer && python3 -m unittest discover -s tests -q) && ./lib/gradlew -p lib compileKotlin compileTestKotlin -q --console=plain"
+    "build": "python3 -m compileall -q viewer/loglens viewer/tests tools && (cd viewer && python3 -m unittest discover -s tests -q) && ./lib/gradlew -p lib compileKotlin compileTestKotlin :android:compileReleaseKotlin -q --console=plain"
   },
   "adapter_override": {},
   "runtime_gate": false,
@@ -53,7 +53,8 @@
           "config": "config",
           "migrate": "config",
           "scaffold": "config",
-          "cli": "config"
+          "cli": "config",
+          "payloads": "format"
         }
       },
       {
@@ -66,7 +67,8 @@
           "test_callsites": "analysis",
           "test_analytics": "analysis",
           "test_migrate": "config",
-          "test_scaffold": "config"
+          "test_scaffold": "config",
+          "test_payloads": "format"
         }
       },
       {
@@ -83,7 +85,9 @@
           "MemorySink": "emitter",
           "Sanitizer": "emitter",
           "Sink": "emitter",
-          "Truncator": "emitter"
+          "Truncator": "emitter",
+          "Payload": "format",
+          "ReleasePolicy": "emitter"
         }
       },
       {
@@ -95,7 +99,8 @@
           "LogLensTest": "emitter",
           "MaskerTest": "emitter",
           "SanitizerTest": "emitter",
-          "TruncatorTest": "emitter"
+          "TruncatorTest": "emitter",
+          "PayloadTest": "format"
         }
       },
       {
@@ -184,7 +189,9 @@
       "lib/core/src/main/kotlin/io/loglens/core/Sanitizer.kt",
       "lib/core/src/main/kotlin/io/loglens/core/Truncator.kt",
       "lib/core/src/main/kotlin/io/loglens/core/Masker.kt",
-      "tools/roundtrip/**"
+      "tools/roundtrip/**",
+      "lib/core/src/main/kotlin/io/loglens/core/Payload.kt",
+      "viewer/loglens/payloads.py"
     ],
     "EVENT": [
       "viewer/loglens/server.py",
@@ -206,7 +213,8 @@
     ],
     "LIST": [
       "viewer/loglens/server.py",
-      "viewer/loglens/web/app.js"
+      "viewer/loglens/web/app.js",
+      "viewer/loglens/payloads.py"
     ]
   },
   "risk_globs": [
